@@ -1,0 +1,716 @@
+<title>わり算の筆算道場</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&family=Zen+Maru+Gothic:wght@400;500;700&display=swap">
+
+<style>
+:root{
+  --paper:#FBFAF5;
+  --panel:#FFFFFF;
+  --grid:#DCE4E3;
+  --ink:#2A3134;
+  --ink-2:#707A7D;
+  --line:#C6CFD1;
+  --red:#CE3F2C;
+  --red-soft:#F7E3DE;
+  --blue:#1C6DA8;
+  --blue-soft:#E3EEF6;
+  --shadow:0 1px 2px rgba(42,49,52,.07), 0 6px 20px rgba(42,49,52,.06);
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#1D2925;
+    --panel:#25332E;
+    --grid:#2F403A;
+    --ink:#ECF1EA;
+    --ink-2:#9DAEA6;
+    --line:#3D4F48;
+    --red:#F1866F;
+    --red-soft:#3B2A27;
+    --blue:#7DC3E7;
+    --blue-soft:#1E3038;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#1D2925;
+  --panel:#25332E;
+  --grid:#2F403A;
+  --ink:#ECF1EA;
+  --ink-2:#9DAEA6;
+  --line:#3D4F48;
+  --red:#F1866F;
+  --red-soft:#3B2A27;
+  --blue:#7DC3E7;
+  --blue-soft:#1E3038;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.25);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif;
+  -webkit-text-size-adjust:100%;
+  -webkit-tap-highlight-color:transparent;
+}
+
+.app{
+  max-width:540px;
+  margin:0 auto;
+  padding:16px 16px 22px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+/* ---------- ヘッダー ---------- */
+.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.title{font-size:19px;font-weight:700;letter-spacing:.02em;margin:0}
+.count{font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.linkbtn{
+  background:none;border:none;padding:4px 2px;margin:0;
+  font:inherit;font-size:13px;color:var(--blue);cursor:pointer;
+  border-bottom:1px solid transparent;
+}
+.linkbtn:hover{border-bottom-color:var(--blue)}
+.linkbtn:focus-visible{outline:2px solid var(--blue);outline-offset:3px;border-radius:4px}
+
+/* ---------- 工程チップ ---------- */
+.steps{display:flex;flex-direction:column;gap:7px}
+.chips{display:flex;gap:7px}
+.chip{
+  flex:1;
+  text-align:center;
+  padding:9px 4px;
+  border-radius:10px;
+  font-size:15px;font-weight:500;
+  background:var(--panel);
+  color:var(--ink-2);
+  border:1.5px solid var(--line);
+  transition:background .18s,color .18s,border-color .18s;
+}
+.chip.done{color:var(--ink);border-color:var(--line);opacity:.55}
+.chip.now{
+  background:var(--blue);
+  border-color:var(--blue);
+  color:#fff;
+  font-weight:700;
+}
+:root[data-theme="dark"] .chip.now{color:#12211D}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .chip.now{color:#12211D}}
+.where{font-size:13px;color:var(--ink-2);text-align:center;letter-spacing:.04em}
+
+/* ---------- 筆算ボード ---------- */
+.board{
+  position:relative;
+  background:var(--panel);
+  border-radius:var(--r);
+  border:1px solid var(--line);
+  box-shadow:var(--shadow);
+  padding:16px 10px 18px;
+  display:flex;justify-content:center;
+  background-image:
+    linear-gradient(to right, var(--grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+  background-size:26px 26px;
+  background-position:center center;
+  overflow:hidden;
+}
+
+.hissan{
+  --cw:clamp(46px,13.5vw,60px);
+  --ch:clamp(46px,13vw,58px);
+  display:grid;
+  grid-template-columns:var(--cw) var(--cw) var(--cw);
+  grid-template-rows:repeat(6,var(--ch));
+}
+.cell{
+  display:flex;align-items:center;justify-content:center;
+  font-family:"Klee One","Hiragino Mincho ProN",serif;
+  font-weight:600;
+  font-size:clamp(29px,8vw,38px);
+  line-height:1;
+  color:var(--ink);
+  font-variant-numeric:tabular-nums;
+  position:relative;
+}
+.cell.given{color:var(--ink)}
+.cell.slot::after{
+  content:"";
+  position:absolute;inset:5px;
+  border-radius:9px;
+  border:2px dashed var(--line);
+  opacity:0;
+  transition:opacity .18s;
+}
+.cell.pending::after{opacity:1}
+.cell.active::after{
+  opacity:1;
+  border:2.5px solid var(--blue);
+  border-style:solid;
+  background:var(--blue-soft);
+  animation:pulse 1.5s ease-in-out infinite;
+}
+.cell .val{position:relative;z-index:1}
+.cell.wrong .val{color:var(--red)}
+.cell.wrong{animation:shake .34s}
+.cell.just .val{animation:pop .3s}
+
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(28,109,168,0)}50%{box-shadow:0 0 0 5px rgba(28,109,168,.14)}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+@keyframes pop{0%{transform:scale(.6);opacity:.3}60%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
+
+/* 筆算の記号 */
+.dvd-l{
+  border-left:3px solid var(--ink);
+  border-top:3px solid var(--ink);
+  border-top-left-radius:16px;
+}
+.dvd-r{border-top:3px solid var(--ink)}
+.rule{
+  grid-column:2 / 4;
+  align-self:end;
+  height:3px;
+  background:var(--ink);
+  border-radius:2px;
+  opacity:0;
+  transform:scaleX(.2);
+  transform-origin:left center;
+  transition:opacity .2s, transform .3s cubic-bezier(.2,.8,.3,1);
+  pointer-events:none;
+}
+.rule.show{opacity:1;transform:scaleX(1)}
+
+/* 花丸 */
+.maru{
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  pointer-events:none;
+}
+.maru svg{width:min(74%,260px);height:auto;overflow:visible}
+.maru path{
+  fill:none;
+  stroke:var(--red);
+  stroke-width:7;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  opacity:.88;
+}
+
+/* ---------- メッセージ ---------- */
+.msg{
+  min-height:46px;
+  display:flex;flex-direction:column;justify-content:center;gap:3px;
+  padding:0 4px;
+}
+.msg .guide{font-size:16px;font-weight:500;line-height:1.5}
+.msg .sub{font-size:13.5px;color:var(--ink-2);line-height:1.5}
+.msg .sub.warn{color:var(--red);font-weight:500}
+.msg .sub.hint{color:var(--blue);font-weight:500}
+
+/* ---------- テンキー ---------- */
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.key{
+  font-family:"Klee One",serif;
+  font-weight:600;
+  font-size:26px;
+  padding:13px 0;
+  border-radius:12px;
+  border:1.5px solid var(--line);
+  background:var(--panel);
+  color:var(--ink);
+  cursor:pointer;
+  box-shadow:var(--shadow);
+  transition:transform .08s, background .15s;
+  font-variant-numeric:tabular-nums;
+}
+.key:active{transform:translateY(2px);background:var(--blue-soft)}
+.key:focus-visible{outline:2.5px solid var(--blue);outline-offset:2px}
+.key.util{
+  font-family:"Zen Maru Gothic",sans-serif;
+  font-size:15px;font-weight:500;
+  color:var(--ink-2);
+  box-shadow:none;
+  background:transparent;
+}
+.key.util:active{background:var(--panel)}
+
+.next{
+  width:100%;
+  padding:19px 0;
+  border-radius:12px;
+  border:none;
+  background:var(--red);
+  color:#fff;
+  font-family:inherit;font-size:19px;font-weight:700;
+  cursor:pointer;
+  box-shadow:var(--shadow);
+}
+:root[data-theme="dark"] .next{color:#2A1512}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .next{color:#2A1512}}
+.next:active{transform:translateY(2px)}
+.next:focus-visible{outline:2.5px solid var(--ink);outline-offset:3px}
+.hidden{display:none !important}
+
+/* ---------- きろく ---------- */
+.sheet{
+  position:fixed;inset:0;
+  background:rgba(20,26,24,.42);
+  display:flex;align-items:center;justify-content:center;
+  padding:18px;
+  z-index:20;
+}
+.sheet-in{
+  background:var(--panel);
+  border-radius:var(--r);
+  border:1px solid var(--line);
+  box-shadow:var(--shadow);
+  padding:22px;
+  width:100%;max-width:400px;
+  max-height:88vh;overflow:auto;
+}
+.sheet h2{margin:0 0 16px;font-size:17px;font-weight:700}
+.stat-row{display:flex;gap:10px;margin-bottom:20px}
+.stat{
+  flex:1;text-align:center;
+  background:var(--paper);
+  border:1px solid var(--line);
+  border-radius:10px;padding:11px 4px;
+}
+.stat b{
+  display:block;
+  font-family:"Klee One",serif;font-size:27px;font-weight:600;
+  font-variant-numeric:tabular-nums;line-height:1.15;
+}
+.stat span{font-size:11.5px;color:var(--ink-2)}
+.sheet h3{margin:0 0 9px;font-size:13.5px;font-weight:500;color:var(--ink-2)}
+.bars{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.bar-row{display:grid;grid-template-columns:56px 1fr 34px;align-items:center;gap:9px;font-size:13.5px}
+.bar-track{height:9px;background:var(--paper);border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.bar-fill{height:100%;background:var(--red);border-radius:4px;transition:width .4s}
+.bar-num{text-align:right;color:var(--ink-2);font-size:12.5px;font-variant-numeric:tabular-nums}
+.sheet-actions{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.sheet-close{
+  padding:11px 22px;border-radius:10px;border:1.5px solid var(--line);
+  background:var(--paper);color:var(--ink);font:inherit;font-size:15px;font-weight:500;cursor:pointer;
+}
+.sheet-close:focus-visible,.linkbtn.danger:focus-visible{outline:2.5px solid var(--blue);outline-offset:2px}
+.linkbtn.danger{color:var(--ink-2);font-size:12.5px}
+.linkbtn.danger:hover{color:var(--red);border-bottom-color:var(--red)}
+.empty{font-size:13.5px;color:var(--ink-2);line-height:1.6}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+}
+</style>
+
+<div class="app">
+  <div class="top">
+    <h1 class="title">わり算の筆算道場</h1>
+    <button class="linkbtn" id="recBtn">きろく</button>
+  </div>
+
+  <div class="steps">
+    <div class="chips" id="chips"></div>
+    <div class="where" id="where"></div>
+  </div>
+
+  <div class="board">
+    <div class="hissan" id="hissan"></div>
+    <div class="maru hidden" id="maru"></div>
+  </div>
+
+  <div class="msg">
+    <div class="guide" id="guide"></div>
+    <div class="sub" id="sub"></div>
+  </div>
+
+  <div class="pad" id="pad"></div>
+  <button class="next hidden" id="nextBtn">つぎのもんだい</button>
+  <div class="count" id="count" style="text-align:center"></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var KEY = "warizan-hissan-v1";
+  var STEPNAMES = ["たてる","かける","ひく","おろす"];
+
+  /* ---------- きろく ---------- */
+  function blank(){
+    return {solved:0, perfect:0, streak:0, best:0,
+            errors:{"たてる":0,"かける":0,"ひく":0,"おろす":0}};
+  }
+  var rec = blank();
+  try{
+    var raw = localStorage.getItem(KEY);
+    if(raw){
+      var p = JSON.parse(raw);
+      if(p && typeof p === "object"){
+        rec.solved = p.solved|0; rec.perfect = p.perfect|0;
+        rec.streak = p.streak|0; rec.best = p.best|0;
+        if(p.errors) for(var k in rec.errors) rec.errors[k] = p.errors[k]|0;
+      }
+    }
+  }catch(e){}
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(rec)); }catch(e){} }
+
+  /* ---------- もんだいを つくる ---------- */
+  var lastN = -1;
+  function makeProblem(){
+    var v, q, n, tries = 0;
+    do{
+      v = 2 + Math.floor(Math.random()*8);          // わる数 2〜9
+      var qmax = Math.floor(99/v);
+      q = 10 + Math.floor(Math.random()*(qmax-9));  // 商は2けた
+      n = q*v;
+      tries++;
+    }while((q%10 === 0 || n === lastN) && tries < 60);
+    lastN = n;
+
+    var d0 = Math.floor(n/10), d1 = n%10;
+    var q0 = Math.floor(q/10), q1 = q%10;
+    var p1 = q0*v;          // 1回目の かけ算（かならず1けた）
+    var s1 = d0 - p1;       // 1回目の ひき算（かならず1けた）
+    var mid = s1*10 + d1;   // おろしたあとの数
+    var p2 = q1*v;          // 2回目の かけ算（= mid）
+
+    var exp = {
+      q0:q0, q1:q1,
+      m1t:p1,  m1o:null,
+      s1t:s1,  s1o:d1,
+      m2t:(p2>=10 ? Math.floor(p2/10) : null), m2o:p2%10,
+      s2t:null, s2o:0
+    };
+
+    var steps = [
+      {k:"たてる", cells:["q0"],
+       guide:"十の位に商をたてよう",           hint:d0+" ÷ "+v+" は いくつ？（あまりは 気にしない）"},
+      {k:"かける", cells:["m1t"],
+       guide:"たてた商と、わる数をかけよう",   hint:q0+" × "+v+" は？"},
+      {k:"ひく",   cells:["s1t"],
+       guide:"上の数から、かけた数をひこう",   hint:d0+" − "+p1+" は？"},
+      {k:"おろす", cells:["s1o"],
+       guide:"一の位の数をおろそう",           hint:"一の位の "+d1+" を そのまま 下におろす"},
+      {k:"たてる", cells:["q1"],
+       guide:"一の位に商をたてよう",           hint:mid+" ÷ "+v+" は いくつ？"},
+      {k:"かける", cells:(p2>=10 ? ["m2t","m2o"] : ["m2o"]),
+       guide:"たてた商と、わる数をかけよう",   hint:q1+" × "+v+" は？"},
+      {k:"ひく",   cells:["s2o"],
+       guide:"上の数から、かけた数をひこう",   hint:mid+" − "+p2+" は？（0 になるよ）"}
+    ];
+
+    return {v:v, q:q, n:n, d0:d0, d1:d1, exp:exp, steps:steps,
+            filled:{}, si:0, ci:0, mistakes:0, done:false};
+  }
+
+  var P = makeProblem();
+
+  /* ---------- 筆算を 組み立てる ---------- */
+  var hissan = document.getElementById("hissan");
+  var cellEl = {};
+
+  function buildBoard(){
+    hissan.innerHTML = "";
+    cellEl = {};
+
+    function put(row, col, cls, text, id){
+      var d = document.createElement("div");
+      d.className = "cell " + (cls||"");
+      d.style.gridRow = row;
+      d.style.gridColumn = col;
+      var s = document.createElement("span");
+      s.className = "val";
+      s.textContent = (text == null ? "" : text);
+      d.appendChild(s);
+      if(id){ cellEl[id] = d; }
+      hissan.appendChild(d);
+      return d;
+    }
+
+    put(1, 2, "slot", "", "q0");
+    put(1, 3, "slot", "", "q1");
+
+    put(2, 1, "given", P.v);
+    put(2, 2, "given dvd-l", P.d0);
+    put(2, 3, "given dvd-r", P.d1);
+
+    put(3, 2, "slot", "", "m1t");
+    put(3, 3, "slot", "", "m1o");
+    put(4, 2, "slot", "", "s1t");
+    put(4, 3, "slot", "", "s1o");
+    put(5, 2, "slot", "", "m2t");
+    put(5, 3, "slot", "", "m2o");
+    put(6, 2, "slot", "", "s2t");
+    put(6, 3, "slot", "", "s2o");
+
+    var r1 = document.createElement("div");
+    r1.className = "rule"; r1.style.gridRow = 3; r1.id = "rule1";
+    hissan.appendChild(r1);
+    var r2 = document.createElement("div");
+    r2.className = "rule"; r2.style.gridRow = 5; r2.id = "rule2";
+    hissan.appendChild(r2);
+  }
+
+  /* ---------- 画面を ぬりかえる ---------- */
+  var chipsEl = document.getElementById("chips");
+  var whereEl = document.getElementById("where");
+  var guideEl = document.getElementById("guide");
+  var subEl   = document.getElementById("sub");
+  var countEl = document.getElementById("count");
+  var padEl   = document.getElementById("pad");
+  var nextBtn = document.getElementById("nextBtn");
+  var maruEl  = document.getElementById("maru");
+
+  function activeCell(){
+    if(P.done) return null;
+    return P.steps[P.si].cells[P.ci];
+  }
+
+  function render(){
+    var step = P.done ? null : P.steps[P.si];
+    var act  = activeCell();
+
+    // 工程チップ
+    chipsEl.innerHTML = "";
+    STEPNAMES.forEach(function(name){
+      var c = document.createElement("div");
+      c.className = "chip";
+      if(step && step.k === name) c.className += " now";
+      c.textContent = name;
+      chipsEl.appendChild(c);
+    });
+    whereEl.textContent = P.done ? "できあがり"
+                        : (P.si <= 3 ? "十の位の計算" : "一の位の計算");
+
+    // マス
+    for(var id in cellEl){
+      var el = cellEl[id];
+      var v  = P.filled[id];
+      el.querySelector(".val").textContent = (v == null ? "" : v);
+      el.classList.remove("active","pending");
+      if(!P.done && step){
+        if(id === act) el.classList.add("active");
+        else if(step.cells.indexOf(id) >= 0) el.classList.add("pending");
+      }
+    }
+
+    // ひき算の線
+    document.getElementById("rule1").classList.toggle("show", P.si >= 2);
+    document.getElementById("rule2").classList.toggle("show", P.si >= 6 || P.done);
+
+    // メッセージ
+    if(P.done){
+      guideEl.textContent = P.mistakes === 0 ? "せいかい！ ノーミス！" : "せいかい！";
+      subEl.className = "sub";
+      subEl.textContent = P.n + " ÷ " + P.v + " = " + P.q
+        + (P.mistakes === 0 ? "" : "（まちがい " + P.mistakes + "回）");
+    }else{
+      guideEl.textContent = step.k + "：" + step.guide;
+      subEl.className = "sub";
+      subEl.textContent = "";
+    }
+
+    padEl.classList.toggle("hidden", P.done);
+    nextBtn.classList.toggle("hidden", !P.done);
+
+    countEl.textContent = "といた数 " + rec.solved + "　花丸 " + rec.perfect
+                        + "　連続 " + rec.streak;
+  }
+
+  /* ---------- 入力 ---------- */
+  function press(dig){
+    if(P.done) return;
+    var id = activeCell();
+    var el = cellEl[id];
+    var want = P.exp[id];
+
+    if(want === dig){
+      P.filled[id] = dig;
+      el.classList.remove("wrong");
+      el.classList.add("just");
+      setTimeout(function(){ el.classList.remove("just"); }, 320);
+
+      P.ci++;
+      if(P.ci >= P.steps[P.si].cells.length){
+        P.ci = 0;
+        P.si++;
+        if(P.si >= P.steps.length) finish();
+      }
+      render();
+    }else{
+      P.mistakes++;
+      var k = P.steps[P.si].k;
+      rec.errors[k] = (rec.errors[k]|0) + 1;
+      save();
+
+      el.querySelector(".val").textContent = dig;
+      el.classList.add("wrong");
+      subEl.className = "sub warn";
+      subEl.textContent = "おしい！ もう一度 " + k + "を やってみよう";
+      setTimeout(function(){
+        el.classList.remove("wrong");
+        el.querySelector(".val").textContent = "";
+      }, 620);
+    }
+  }
+
+  function showHint(){
+    if(P.done) return;
+    subEl.className = "sub hint";
+    subEl.textContent = "ヒント：" + P.steps[P.si].hint;
+  }
+
+  function retry(){
+    P.filled = {}; P.si = 0; P.ci = 0; P.mistakes = 0; P.done = false;
+    maruEl.classList.add("hidden");
+    render();
+  }
+
+  /* ---------- 花丸 ---------- */
+  function flowerPath(cx, cy, r, petals){
+    var d = "", R = r*1.28;
+    for(var i=0;i<petals;i++){
+      var a0 = (i/petals)*Math.PI*2 - Math.PI/2;
+      var a1 = ((i+1)/petals)*Math.PI*2 - Math.PI/2;
+      var ca = a0 + (a1-a0)*0.28, cb = a0 + (a1-a0)*0.72;
+      var x0 = cx + r*Math.cos(a0), y0 = cy + r*Math.sin(a0);
+      var x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1);
+      var xa = cx + R*Math.cos(ca), ya = cy + R*Math.sin(ca);
+      var xb = cx + R*Math.cos(cb), yb = cy + R*Math.sin(cb);
+      if(i === 0) d += "M" + x0.toFixed(1) + " " + y0.toFixed(1);
+      d += "C" + xa.toFixed(1) + " " + ya.toFixed(1) + " "
+              + xb.toFixed(1) + " " + yb.toFixed(1) + " "
+              + x1.toFixed(1) + " " + y1.toFixed(1);
+    }
+    return d + "Z";
+  }
+
+  function drawMaru(perfect){
+    var d = perfect ? flowerPath(100, 100, 74, 9)
+                    : "M100 26 A74 74 0 1 1 99.9 26 Z";
+    maruEl.innerHTML = '<svg viewBox="0 0 200 200" aria-hidden="true"><path d="'
+                     + d + '"></path></svg>';
+    maruEl.classList.remove("hidden");
+    var path = maruEl.querySelector("path");
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if(!reduce && path.getTotalLength){
+      var len = path.getTotalLength();
+      path.style.strokeDasharray = len;
+      path.style.strokeDashoffset = len;
+      path.animate(
+        [{strokeDashoffset:len},{strokeDashoffset:0}],
+        {duration:750, easing:"cubic-bezier(.3,.7,.3,1)", fill:"forwards"}
+      );
+    }
+  }
+
+  function finish(){
+    P.done = true;
+    rec.solved++;
+    if(P.mistakes === 0){
+      rec.perfect++;
+      rec.streak++;
+      if(rec.streak > rec.best) rec.best = rec.streak;
+    }else{
+      rec.streak = 0;
+    }
+    save();
+    drawMaru(P.mistakes === 0);
+  }
+
+  /* ---------- テンキー ---------- */
+  function buildPad(){
+    padEl.innerHTML = "";
+    var order = [1,2,3,4,5,6,7,8,9];
+    order.forEach(function(d){
+      var b = document.createElement("button");
+      b.className = "key"; b.textContent = d;
+      b.addEventListener("click", function(){ press(d); });
+      padEl.appendChild(b);
+    });
+    var h = document.createElement("button");
+    h.className = "key util"; h.textContent = "ヒント";
+    h.addEventListener("click", showHint);
+    padEl.appendChild(h);
+
+    var z = document.createElement("button");
+    z.className = "key"; z.textContent = "0";
+    z.addEventListener("click", function(){ press(0); });
+    padEl.appendChild(z);
+
+    var r = document.createElement("button");
+    r.className = "key util"; r.textContent = "やりなおす";
+    r.addEventListener("click", retry);
+    padEl.appendChild(r);
+  }
+
+  document.addEventListener("keydown", function(e){
+    if(e.key >= "0" && e.key <= "9"){ press(parseInt(e.key,10)); }
+    else if(e.key === "Enter" && P.done){ nextProblem(); }
+  });
+
+  function nextProblem(){
+    P = makeProblem();
+    maruEl.classList.add("hidden");
+    buildBoard();
+    render();
+  }
+  nextBtn.addEventListener("click", nextProblem);
+
+  /* ---------- きろくシート ---------- */
+  var recBtn = document.getElementById("recBtn");
+  recBtn.addEventListener("click", function(){
+    var total = 0;
+    for(var k in rec.errors) total += rec.errors[k];
+
+    var bars = STEPNAMES.map(function(k){
+      var n = rec.errors[k]|0;
+      var w = total ? Math.round(n/total*100) : 0;
+      return '<div class="bar-row"><span>' + k + '</span>'
+           + '<div class="bar-track"><div class="bar-fill" style="width:' + w + '%"></div></div>'
+           + '<span class="bar-num">' + n + '</span></div>';
+    }).join("");
+
+    var body = ''
+      + '<h2>きろく</h2>'
+      + '<div class="stat-row">'
+      +   '<div class="stat"><b>' + rec.solved  + '</b><span>といた数</span></div>'
+      +   '<div class="stat"><b>' + rec.perfect + '</b><span>花丸</span></div>'
+      +   '<div class="stat"><b>' + rec.best    + '</b><span>連続さいこう</span></div>'
+      + '</div>'
+      + '<h3>つまずいた工程</h3>'
+      + (total ? '<div class="bars">' + bars + '</div>'
+               : '<p class="empty">まだ まちがいは ありません。</p>')
+      + '<div class="sheet-actions">'
+      +   '<button class="sheet-close" id="closeSheet">とじる</button>'
+      +   '<button class="linkbtn danger" id="resetRec">きろくを消す</button>'
+      + '</div>';
+
+    var sheet = document.createElement("div");
+    sheet.className = "sheet";
+    sheet.innerHTML = '<div class="sheet-in" role="dialog" aria-modal="true" aria-label="きろく">'
+                    + body + '</div>';
+    document.body.appendChild(sheet);
+
+    function close(){ sheet.remove(); recBtn.focus(); }
+    sheet.addEventListener("click", function(e){ if(e.target === sheet) close(); });
+    sheet.querySelector("#closeSheet").addEventListener("click", close);
+    sheet.querySelector("#closeSheet").focus();
+    sheet.querySelector("#resetRec").addEventListener("click", function(){
+      if(confirm("きろくを すべて 消しますか？")){
+        rec = blank(); save(); close(); render();
+      }
+    });
+  });
+
+  buildBoard();
+  buildPad();
+  render();
+})();
+</script>
