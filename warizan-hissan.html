@@ -344,7 +344,7 @@ body{
 .stat span{font-size:11.5px;color:var(--ink-2)}
 .sheet h3{margin:0 0 9px;font-size:13.5px;font-weight:500;color:var(--ink-2)}
 .bars{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
-.bar-row{display:grid;grid-template-columns:66px 1fr 30px;align-items:center;gap:9px;font-size:13.5px}
+.bar-row{display:grid;grid-template-columns:74px 1fr 28px;align-items:center;gap:9px;font-size:13.5px}
 .bar-track{height:9px;background:var(--paper);border:1px solid var(--line);border-radius:5px;overflow:hidden}
 .bar-fill{height:100%;background:var(--red);border-radius:4px;transition:width .4s}
 .bar-num{text-align:right;color:var(--ink-2);font-size:12.5px;font-variant-numeric:tabular-nums}
@@ -483,8 +483,9 @@ body{
   var MODEKEY = "warizan-hissan-mode";   // 商のけた数
   var REMKEY  = "warizan-hissan-rem";    // あまり
   var STEPNAMES = ["たてる","かける","ひく","おろす"];
-  var ERRKEYS   = ["たてる","かける","ひく","おろす","立てる位"];
-  var KINDS = [{id:"two",label:"商2けた"},{id:"one",label:"商1けた"},{id:"mix",label:"まぜる"}];
+  var ERRKEYS   = ["たてる","かける","ひく","おろす","立てる位","0を立てる"];
+  var KINDS = [{id:"two",label:"商2けた"},{id:"one",label:"商1けた"},
+               {id:"zero",label:"商に0"},{id:"mix",label:"まぜる"}];
   var REMS  = [{id:"none",label:"あまりなし"},{id:"some",label:"あまりあり"},{id:"mix",label:"まぜる"}];
 
   /* ---------- きろく ---------- */
@@ -528,16 +529,15 @@ body{
   /* ---------- もんだいの一覧を つくる ---------- */
   // わる数 2〜9、わられる数 10〜99 を すべて 4つの箱に 仕分ける
   var POOLS = (function(){
-    var P = {two:{none:[],some:[]}, one:{none:[],some:[]}};
+    var P = {two:{none:[],some:[]}, one:{none:[],some:[]}, zero:{none:[],some:[]}};
     for(var v=2; v<=9; v++){
       for(var n=10; n<=99; n++){
         var d0 = Math.floor(n/10), d1 = n%10, r = n%v;
         var bin = (r===0) ? "none" : "some";
         if(d0 >= v){
-          // 商が2けた
+          // 商が2けた。商の一の位が0になる形は べつの箱に分ける
           var q0=Math.floor(d0/v), s1=d0-q0*v, mid=s1*10+d1, q1=Math.floor(mid/v);
-          if(q1 === 0) continue;          // 商に0が立つ形は 今回は出さない
-          P.two[bin].push([n,v]);
+          P[q1 === 0 ? "zero" : "two"][bin].push([n,v]);
         }else{
           P.one[bin].push([n,v]);         // 商が1けた
         }
@@ -546,7 +546,8 @@ body{
     return P;
   })();
 
-  function kindIds(){ return kindMode==="mix" ? ["two","one"] : [kindMode]; }
+  function kindIds(){ return kindMode==="mix" ? ["two","one","zero"] : [kindMode]; }
+  function askPlace(){ return kindMode === "one" || kindMode === "mix"; }
   function remIds(){  return remMode==="mix"  ? ["none","some"] : [remMode]; }
   function poolCount(){
     var c = 0;
@@ -555,7 +556,7 @@ body{
   }
   function setLabel(){
     if(kindMode==="mix" && remMode==="mix") return "ぜんぶまぜる";
-    var kl = {two:"商2けた", one:"商1けた", mix:"商まぜる"}[kindMode];
+    var kl = {two:"商2けた", one:"商1けた", zero:"商に0", mix:"商まぜる"}[kindMode];
     var rl = {none:"あまりなし", some:"あまりあり", mix:"あまりまぜる"}[remMode];
     return kl + "・" + rl;
   }
@@ -567,7 +568,10 @@ body{
   function pickCat(setting, opts, last){
     if(setting !== "mix") return setting;
     var c = opts[Math.floor(Math.random()*opts.length)];
-    if(c === last && Math.random() < 0.5) c = (c === opts[0]) ? opts[1] : opts[0];
+    if(c === last && Math.random() < 0.5){
+      var others = opts.filter(function(o){ return o !== last; });
+      c = others[Math.floor(Math.random()*others.length)];
+    }
     return c;
   }
 
@@ -601,7 +605,9 @@ body{
       {k:"おろす", cells:["s1o"],
        guide:"一の位の数をおろそう",         hint:"一の位の "+d1+" を そのまま 下におろす"},
       {k:"たてる", cells:["q1"], into:mid,
-       guide:"一の位に商をたてよう",         hint:mid+" ÷ "+v+" は いくつ？（あまりは 気にしない）"},
+       guide:"一の位に商をたてよう",
+       hint: (q1===0) ? (mid+" は "+v+" でわれないね。こんなときは 0 を立てるよ")
+                      : (mid+" ÷ "+v+" は いくつ？（あまりは 気にしない）")},
       {k:"かける", cells:(p2>=10 ? ["m2t","m2o"] : ["m2o"]),
        guide:"たてた商と、わる数をかけよう", hint:q1+" × "+v+" は？"},
       {k:"ひく",   cells:["s2o"], last:true,
@@ -635,7 +641,7 @@ body{
   }
 
   function makeProblem(){
-    var kind = pickCat(kindMode, ["two","one"], lastKind);
+    var kind = pickCat(kindMode, ["two","one","zero"], lastKind);
     var rem  = pickCat(remMode,  ["none","some"], lastRem);
     lastKind = kind; lastRem = rem;
 
@@ -647,7 +653,8 @@ body{
     }while(pool.length > 1 && pick[0] === lastN && t < 40);
     lastN = pick[0];
 
-    var place = (kindMode !== "two");   // 商1けたがありうるときだけ位をえらばせる
+    var place = askPlace();   // 商1けたがありうるときだけ位をえらばせる
+    // 商に0が立つ形も 筆算の組み立ては 商2けたと同じ
     return (kind === "one") ? oneDigit(pick[0], pick[1], place)
                             : twoDigit(pick[0], pick[1], place);
   }
@@ -816,6 +823,9 @@ body{
     }
     if(step.k === "たてる" && step.into != null){
       var want = P.exp[target];
+      if(want === 0){
+        return step.into + " は " + P.v + " でわれないね。わられないときは 0 を立てるよ";
+      }
       return (dig > want)
         ? "大きすぎるよ。" + dig + " × " + P.v + " = " + (dig*P.v) + " で、" + step.into + " より大きいね"
         : "小さすぎるよ。ひいたあとが まだ " + P.v + " でわれてしまうね";
@@ -863,7 +873,9 @@ body{
 
     // まちがい
     P.mistakes++;
-    var ekey = placeErr ? "立てる位" : step.k;
+    var ekey = placeErr ? "立てる位"
+             : (step.k === "たてる" && P.exp[target] === 0) ? "0を立てる"
+             : step.k;
     rec.errors[ekey] = (rec.errors[ekey]|0) + 1;
     save();
 
@@ -969,7 +981,7 @@ body{
 
   setBtn.addEventListener("click", function(){
     var html = '<h2>もんだいの種類</h2>'
-      + '<h3>商のけた数</h3>' + segHTML("segKind", KINDS, kindMode)
+      + '<h3>商の形</h3>' + segHTML("segKind", KINDS, kindMode)
       + '<h3>あまり</h3>'     + segHTML("segRem",  REMS,  remMode)
       + '<p class="empty" id="poolInfo"></p>'
       + '<div class="sheet-actions">'
@@ -980,9 +992,9 @@ body{
       var info = sheet.querySelector("#poolInfo");
       function refresh(){
         info.textContent = "いま出るのは " + poolCount() + " 通り。"
-          + (kindMode === "two"
-              ? "商は必ず十の位から立つので、書く位置はアプリが決めます。"
-              : "商を立てる位は、子どもがえらびます。");
+          + (askPlace()
+              ? "商を立てる位は、子どもがえらびます。"
+              : "商は必ず十の位から立つので、書く位置はアプリが決めます。");
         ["segKind","segRem"].forEach(function(gid){
           var cur = (gid === "segKind") ? kindMode : remMode;
           sheet.querySelectorAll("#" + gid + " .mode").forEach(function(b){
