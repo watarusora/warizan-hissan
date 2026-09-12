@@ -161,17 +161,18 @@ body{
 }
 
 .hissan{
-  --cw:clamp(46px,13.5vw,60px);
-  --ch:clamp(46px,13vw,58px);
+  --cwbase:clamp(38px,13.5vw,60px);
+  --chbase:clamp(38px,13vw,58px);
+  /* 列が増えても画面からはみ出さないように、幅で頭打ちにする */
+  --cw:min(var(--cwbase), calc((100vw - 70px) / var(--cols, 3)));
+  --ch:min(var(--chbase), var(--cw));
   display:grid;
-  grid-template-columns:var(--cw) var(--cw) var(--cw);
-  grid-template-rows:repeat(6,var(--ch));
 }
 .cell{
   display:flex;align-items:center;justify-content:center;
   font-family:"Klee One","Hiragino Mincho ProN",serif;
   font-weight:600;
-  font-size:clamp(29px,8vw,38px);
+  font-size:min(clamp(24px,8vw,38px), calc(var(--cw) * 0.66));
   line-height:1;
   color:var(--ink);
   font-variant-numeric:tabular-nums;
@@ -246,7 +247,7 @@ body{
   display:flex;align-items:center;justify-content:center;
   pointer-events:none;
 }
-.maru svg{width:min(74%,260px);height:auto;overflow:visible}
+.maru svg{width:min(84%,320px);height:auto;overflow:visible}
 .maru path{
   fill:none;
   stroke:var(--red);
@@ -385,10 +386,11 @@ body{
   }
   /* 画面の高さに合わせて、あいた分だけ大きくする */
   .hissan{
-    --cw:clamp(34px,9.6vh,80px);
-    --ch:clamp(32px,9.2vh,76px);
+    --cwbase:clamp(30px,9.6vh,80px);
+    --chbase:clamp(28px,9.2vh,76px);
+    --cw:min(var(--cwbase), calc((min(100vw, 460px) - 40px) / var(--cols, 3)));
   }
-  .cell{font-size:clamp(22px,6vh,50px)}
+  .cell{font-size:min(clamp(20px,6vh,50px), calc(var(--cw) * 0.66))}
   .note{font-size:clamp(11px,1.6vh,14px)}
   .board{padding:12px 10px 14px}
   .msg{min-height:44px}
@@ -412,10 +414,10 @@ body{
   .where{font-size:12px}
   .board{padding:8px 8px 10px}
   .hissan{
-    --cw:clamp(26px,7.2vh,46px);
-    --ch:clamp(24px,6.8vh,44px);
+    --cwbase:clamp(24px,7.2vh,46px);
+    --chbase:clamp(22px,6.8vh,44px);
   }
-  .cell{font-size:clamp(17px,4.6vh,30px)}
+  .cell{font-size:min(clamp(15px,4.6vh,30px), calc(var(--cw) * 0.66))}
   .key{padding:clamp(6px,1.6vh,13px) 0;font-size:clamp(16px,3vh,23px)}
   .key.util{font-size:clamp(11px,1.7vh,14px)}
   .msg{min-height:36px}
@@ -425,12 +427,12 @@ body{
 
 /* たて向きのスマホ（iPadのたて向きには効かない） */
 @media (orientation:portrait) and (max-width:500px){
-  .app{padding:14px 16px 16px}
+  .app{padding:12px 16px 10px;gap:11px}
   .hissan{
-    --cw:clamp(42px,12.5vw,52px);
-    --ch:clamp(40px,12vw,50px);
+    --cwbase:clamp(34px,12.5vw,52px);
+    --chbase:clamp(32px,12vw,50px);
   }
-  .cell{font-size:clamp(26px,7.4vw,34px)}
+  .cell{font-size:min(clamp(22px,7.4vw,34px), calc(var(--cw) * 0.66))}
 }
 
 @media (prefers-reduced-motion:reduce){
@@ -480,12 +482,20 @@ body{
   "use strict";
 
   var KEY     = "warizan-hissan-v1";
-  var MODEKEY = "warizan-hissan-mode";   // 商のけた数
+  var DIVKEY  = "warizan-hissan-div";    // わる数のけた数
+  var MODEKEY = "warizan-hissan-mode";   // 商の形（わる数1けたのとき）
+  var NWKEY   = "warizan-hissan-nw";     // わられる数のけた数（わる数2けたのとき）
   var REMKEY  = "warizan-hissan-rem";    // あまり
+
   var STEPNAMES = ["たてる","かける","ひく","おろす"];
   var ERRKEYS   = ["たてる","かける","ひく","おろす","立てる位","0を立てる"];
+  var KETA      = ["一の位","十の位","百の位","千の位"];
+
+  var DIVS  = [{id:"d1",label:"1けた"},{id:"d2",label:"2けた"}];
   var KINDS = [{id:"two",label:"商2けた"},{id:"one",label:"商1けた"},
                {id:"zero",label:"商に0"},{id:"mix",label:"まぜる"}];
+  var NWS   = [{id:"round",label:"何十でわる"},{id:"n2",label:"2けた"},
+               {id:"n3",label:"3けた"},{id:"mix",label:"まぜる"}];
   var REMS  = [{id:"none",label:"あまりなし"},{id:"some",label:"あまりあり"},{id:"mix",label:"まぜる"}];
 
   /* ---------- きろく ---------- */
@@ -509,62 +519,209 @@ body{
   function save(){ try{ localStorage.setItem(KEY, JSON.stringify(rec)); }catch(e){} }
 
   /* ---------- せってい ---------- */
-  var kindMode = "two", remMode = "none";
-  function loadSet(){
+  var divMode="d1", kindMode="two", nwMode="n2", remMode="none";
+  function has(list,id){ return list.some(function(x){ return x.id===id; }); }
+  (function load(){
     try{
-      var a = localStorage.getItem(MODEKEY);
-      if(a && KINDS.some(function(x){ return x.id===a; })) kindMode = a;
-      var b = localStorage.getItem(REMKEY);
-      if(b && REMS.some(function(x){ return x.id===b; })) remMode = b;
+      var a=localStorage.getItem(DIVKEY);  if(a && has(DIVS,a))  divMode=a;
+      var b=localStorage.getItem(MODEKEY); if(b && has(KINDS,b)) kindMode=b;
+      var c=localStorage.getItem(NWKEY);   if(c && has(NWS,c))   nwMode=c;
+      var d=localStorage.getItem(REMKEY);  if(d && has(REMS,d))  remMode=d;
     }catch(e){}
-  }
+  })();
   function saveSet(){
     try{
-      localStorage.setItem(MODEKEY, kindMode);
-      localStorage.setItem(REMKEY, remMode);
+      localStorage.setItem(DIVKEY,divMode);
+      localStorage.setItem(MODEKEY,kindMode);
+      localStorage.setItem(NWKEY,nwMode);
+      localStorage.setItem(REMKEY,remMode);
     }catch(e){}
   }
-  loadSet();
 
-  /* ---------- もんだいの一覧を つくる ---------- */
-  // わる数 2〜9、わられる数 10〜99 を すべて 4つの箱に 仕分ける
-  var POOLS = (function(){
+  /* ---------- わる数1けた：720通りを仕分けて持っておく ---------- */
+  var POOLS1 = (function(){
     var P = {two:{none:[],some:[]}, one:{none:[],some:[]}, zero:{none:[],some:[]}};
     for(var v=2; v<=9; v++){
       for(var n=10; n<=99; n++){
-        var d0 = Math.floor(n/10), d1 = n%10, r = n%v;
-        var bin = (r===0) ? "none" : "some";
+        var d0=Math.floor(n/10), d1=n%10, bin=(n%v===0)?"none":"some";
         if(d0 >= v){
-          // 商が2けた。商の一の位が0になる形は べつの箱に分ける
-          var q0=Math.floor(d0/v), s1=d0-q0*v, mid=s1*10+d1, q1=Math.floor(mid/v);
-          P[q1 === 0 ? "zero" : "two"][bin].push([n,v]);
+          var q0=Math.floor(d0/v), s1=d0-q0*v, q1=Math.floor((s1*10+d1)/v);
+          P[q1===0 ? "zero" : "two"][bin].push([n,v]);
         }else{
-          P.one[bin].push([n,v]);         // 商が1けた
+          P.one[bin].push([n,v]);
         }
       }
     }
     return P;
   })();
 
+  /* ---------- わる数2けた：数が多いので、その場で作る ---------- */
+  // 何十でわる / わられる数2けた / わられる数3けた
+  function d2Spec(id){
+    if(id === "round") return {lo:10,  hi:999, only10:true};
+    if(id === "n2")    return {lo:10,  hi:99,  only10:false};
+    return                    {lo:100, hi:999, only10:false};
+  }
+  // 商が1にしかならない問題（98÷73 など）は練習にならないので出さない
+  function d2Count(v, sp, rem){
+    var start = Math.max(sp.lo, 2*v);
+    if(start > sp.hi) return 0;
+    var mult = Math.floor(sp.hi/v) - Math.ceil(start/v) + 1;
+    if(mult < 0) mult = 0;
+    return (rem === "none") ? mult : (sp.hi - start + 1) - mult;
+  }
+  function d2Vs(sp, rem){
+    var vs = [];
+    for(var v=10; v<=99; v++){
+      if(sp.only10 && v % 10 !== 0) continue;
+      if(d2Count(v, sp, rem) > 0) vs.push(v);
+    }
+    return vs;
+  }
+  function d2Pick(nwSel, rem){
+    var sp = d2Spec(nwSel), vs = d2Vs(sp, rem);
+    var vv = vs[Math.floor(Math.random()*vs.length)];
+    var start = Math.max(sp.lo, 2*vv), n;
+    if(rem === "none"){
+      var qmin = Math.ceil(start/vv), qmax = Math.floor(sp.hi/vv);
+      n = (qmin + Math.floor(Math.random()*(qmax-qmin+1))) * vv;
+    }else{
+      var t = 0;
+      do{ n = start + Math.floor(Math.random()*(sp.hi-start+1)); t++; }
+      while(n % vv === 0 && t < 300);
+      if(n % vv === 0) n = (n + 1 <= sp.hi) ? n + 1 : n - 1;
+    }
+    return [n, vv];
+  }
+
   function kindIds(){ return kindMode==="mix" ? ["two","one","zero"] : [kindMode]; }
-  function askPlace(){ return kindMode === "one" || kindMode === "mix"; }
-  function remIds(){  return remMode==="mix"  ? ["none","some"] : [remMode]; }
+  function nwIds(){   return nwMode==="mix"   ? ["round","n2","n3"]  : [nwMode]; }
+  function remIds(){  return remMode==="mix"  ? ["none","some"]      : [remMode]; }
+  function askPlace(){
+    return divMode==="d2" ? true : (kindMode==="one" || kindMode==="mix");
+  }
   function poolCount(){
     var c = 0;
-    kindIds().forEach(function(k){ remIds().forEach(function(r){ c += POOLS[k][r].length; }); });
+    if(divMode === "d1"){
+      kindIds().forEach(function(k){ remIds().forEach(function(r){ c += POOLS1[k][r].length; }); });
+    }else{
+      nwIds().forEach(function(x){
+        var sp = d2Spec(x);
+        remIds().forEach(function(rm){
+          for(var v=10; v<=99; v++){
+            if(sp.only10 && v % 10 !== 0) continue;
+            c += d2Count(v, sp, rm);
+          }
+        });
+      });
+    }
     return c;
   }
   function setLabel(){
-    if(kindMode==="mix" && remMode==="mix") return "ぜんぶまぜる";
-    var kl = {two:"商2けた", one:"商1けた", zero:"商に0", mix:"商まぜる"}[kindMode];
     var rl = {none:"あまりなし", some:"あまりあり", mix:"あまりまぜる"}[remMode];
-    return kl + "・" + rl;
+    if(divMode === "d1"){
+      if(kindMode==="mix" && remMode==="mix") return "ぜんぶまぜる";
+      return {two:"商2けた", one:"商1けた", zero:"商に0", mix:"商まぜる"}[kindMode] + "・" + rl;
+    }
+    if(nwMode==="mix" && remMode==="mix") return "わる数2けた・ぜんぶまぜる";
+    return "わる数2けた・" + {round:"何十でわる", n2:"わられる数2けた",
+                              n3:"わられる数3けた", mix:"形まぜる"}[nwMode] + "・" + rl;
   }
 
-  /* ---------- もんだいを つくる ---------- */
-  var lastN = -1, lastKind = "", lastRem = "";
+  /* ---------- もんだいを組み立てる（けた数によらない） ---------- */
+  function ketaName(col, nw){ return KETA[nw - 1 - col] || ""; }
 
-  // まぜるときは 同じ種類が続きすぎないようにする
+  function buildProblem(n, v, wantPlace){
+    var D  = String(n).split("").map(Number);
+    var nw = D.length, dw = String(v).length;
+
+    // 最初にわる部分（先頭dwけた。それでも小さければ dw+1 けた）
+    var s = dw;
+    if(Number(D.slice(0,dw).join("")) < v) s = dw + 1;
+    var qw = nw - s + 1;
+    var R  = 2 + 2*qw;                       // 行数
+
+    // 各段の計算
+    var stages = [], partial = Number(D.slice(0,s).join("")), qstr = "";
+    for(var i=0; i<qw; i++){
+      var col  = s - 1 + i;
+      var q    = Math.floor(partial / v);
+      var prod = q * v;
+      var diff = partial - prod;
+      var bring = (i < qw-1) ? D[s+i] : null;
+      stages.push({col:col, into:partial, q:q, prod:prod, diff:diff, bring:bring});
+      qstr += q;
+      if(bring !== null) partial = diff*10 + bring;
+    }
+    var qv = Number(qstr), rv = stages[qw-1].diff;
+
+    // マスの正解（null は「空欄が正しい」）
+    var exp = {}, editRows = [0];
+    for(var rr=2; rr<R; rr++) editRows.push(rr);
+    editRows.forEach(function(row){
+      for(var j=0; j<nw; j++) exp["c"+row+"_"+j] = null;
+    });
+    function put(row, endCol, val){
+      var str = String(val), ids = [], start = endCol - str.length + 1;
+      for(var k=0; k<str.length; k++){
+        var id = "c"+row+"_"+(start+k);
+        exp[id] = Number(str.charAt(k));
+        ids.push(id);
+      }
+      return ids;
+    }
+
+    var steps = [];
+    stages.forEach(function(st, i){
+      var prodRow = 2 + 2*i, diffRow = 3 + 2*i;
+      var qid = "c0_" + st.col;
+      exp[qid] = st.q;
+      var prodIds = put(prodRow, st.col, st.prod);
+      var diffIds = put(diffRow, st.col, st.diff);
+      var round   = Math.round(v/10)*10;
+
+      steps.push({k:"たてる", stage:i, cells:[qid], into:st.into, col:st.col,
+        guide:"" + ketaName(st.col, nw) + "に商をたてよう",
+        hint: (st.q === 0)
+                ? (st.into + " は " + v + " でわれないね。こんなときは 0 を立てるよ")
+                : (dw === 1
+                    ? (st.into + " ÷ " + v + " は いくつ？（あまりは 気にしない）")
+                    : (v + " を およそ " + round + " とみて、" + st.into + " ÷ " + round
+                       + " で見当をつけよう。合わなければ 1つずつ直すよ"))});
+
+      steps.push({k:"かける", stage:i, cells:prodIds,
+        guide:"たてた商と、わる数をかけよう", hint:st.q + " × " + v + " は？"});
+
+      steps.push({k:"ひく", stage:i, cells:diffIds, last:(i === qw-1), into:st.into, prod:st.prod,
+        guide: (i === qw-1 && st.diff > 0)
+                 ? "上の数から、かけた数をひこう。のこりがあまり"
+                 : "上の数から、かけた数をひこう",
+        hint: st.into + " − " + st.prod + " は？"
+              + (i === qw-1 ? (st.diff === 0 ? "（0 になるよ）" : "（のこりが あまり）") : "")});
+
+      if(st.bring !== null){
+        exp["c"+diffRow+"_"+(st.col+1)] = st.bring;      // おろす数
+        steps.push({k:"おろす", stage:i, cells:["c"+diffRow+"_"+(st.col+1)], col:st.col+1,
+          guide: ketaName(st.col+1, nw) + "の数をおろそう",
+          hint:  ketaName(st.col+1, nw) + "の " + st.bring + " を そのまま 下におろす"});
+      }
+    });
+
+    // 商をどの位に立てるか（候補が2つあるときだけ選ばせる）
+    var placeCells = [];
+    [dw-1, dw].forEach(function(c){ if(c >= 0 && c < nw) placeCells.push("c0_"+c); });
+    if(wantPlace && placeCells.length > 1){
+      steps[0].place = true;
+      steps[0].guide = "商を立てる位をえらんでタップしよう";
+    }
+
+    return {n:n, v:v, q:qv, r:rv, D:D, nw:nw, dw:dw, qw:qw, rows:R, s:s,
+            stages:stages, exp:exp, steps:steps, placeCells:placeCells,
+            filled:{}, si:0, ci:0, sel:null, mistakes:0, done:false, doneStages:0};
+  }
+
+  /* ---------- 出題 ---------- */
+  var lastN=-1, lastKind="", lastNw="", lastRem="";
   function pickCat(setting, opts, last){
     if(setting !== "mix") return setting;
     var c = opts[Math.floor(Math.random()*opts.length)];
@@ -575,112 +732,55 @@ body{
     return c;
   }
 
-  function newState(kind,v,q,r,n,d0,d1,exp,steps){
-    return {kind:kind, v:v, q:q, r:r, n:n, d0:d0, d1:d1, exp:exp, steps:steps,
-            filled:{}, si:0, ci:0, sel:null, mistakes:0, done:false};
-  }
-
-  // 商が2けた（十の位から商が立つ）
-  function twoDigit(n, v, place){
-    var d0=Math.floor(n/10), d1=n%10;
-    var q0=Math.floor(d0/v), p1=q0*v, s1=d0-p1;
-    var mid=s1*10+d1, q1=Math.floor(mid/v), p2=q1*v, r=mid-p2;
-    var q=q0*10+q1;
-
-    var exp = {q0:q0, q1:q1,
-               m1t:p1, m1o:null,
-               s1t:s1, s1o:d1,
-               m2t:(p2>=10 ? Math.floor(p2/10) : null), m2o:p2%10,
-               s2t:null, s2o:r};
-
-    var steps = [
-      {k:"たてる", cells:["q0"], place:place, into:d0,
-       guide: place ? "商を立てる位をえらんでタップしよう" : "十の位に商をたてよう",
-       hint:  place ? ("十の位の "+d0+" は "+v+" でわれるね。だから商は十の位から。"+d0+" ÷ "+v+" は？")
-                    : (d0+" ÷ "+v+" は いくつ？（あまりは 気にしない）")},
-      {k:"かける", cells:["m1t"],
-       guide:"たてた商と、わる数をかけよう", hint:q0+" × "+v+" は？"},
-      {k:"ひく",   cells:["s1t"],
-       guide:"上の数から、かけた数をひこう", hint:d0+" − "+p1+" は？"},
-      {k:"おろす", cells:["s1o"],
-       guide:"一の位の数をおろそう",         hint:"一の位の "+d1+" を そのまま 下におろす"},
-      {k:"たてる", cells:["q1"], into:mid,
-       guide:"一の位に商をたてよう",
-       hint: (q1===0) ? (mid+" は "+v+" でわれないね。こんなときは 0 を立てるよ")
-                      : (mid+" ÷ "+v+" は いくつ？（あまりは 気にしない）")},
-      {k:"かける", cells:(p2>=10 ? ["m2t","m2o"] : ["m2o"]),
-       guide:"たてた商と、わる数をかけよう", hint:q1+" × "+v+" は？"},
-      {k:"ひく",   cells:["s2o"], last:true,
-       guide: r===0 ? "上の数から、かけた数をひこう" : "上の数から、かけた数をひこう。のこりがあまり",
-       hint:  mid+" − "+p2+" は？" + (r===0 ? "（0 になるよ）" : "（のこりが あまり）")}
-    ];
-    return newState("two",v,q,r,n,d0,d1,exp,steps);
-  }
-
-  // 商が1けた（十の位には商が立たない）
-  function oneDigit(n, v, place){
-    var d0=Math.floor(n/10), d1=n%10;
-    var q=Math.floor(n/v), p=q*v, r=n-p;
-
-    var exp = {q0:null, q1:q,
-               m1t:(p>=10 ? Math.floor(p/10) : null), m1o:p%10,
-               s1t:null, s1o:r,
-               m2t:null, m2o:null, s2t:null, s2o:null};
-
-    var steps = [
-      {k:"たてる", cells:["q1"], place:place, into:n,
-       guide: place ? "商を立てる位をえらんでタップしよう" : "一の位に商をたてよう",
-       hint:"十の位の "+d0+" は "+v+" より小さいから、十の位には立たない。"+n+" ÷ "+v+" は？"},
-      {k:"かける", cells:(p>=10 ? ["m1t","m1o"] : ["m1o"]),
-       guide:"たてた商と、わる数をかけよう", hint:q+" × "+v+" は？"},
-      {k:"ひく",   cells:["s1o"], last:true,
-       guide: r===0 ? "上の数から、かけた数をひこう" : "上の数から、かけた数をひこう。のこりがあまり",
-       hint:  n+" − "+p+" は？" + (r===0 ? "（0 になるよ）" : "（のこりが あまり）")}
-    ];
-    return newState("one",v,q,r,n,d0,d1,exp,steps);
-  }
-
   function makeProblem(){
-    var kind = pickCat(kindMode, ["two","one","zero"], lastKind);
-    var rem  = pickCat(remMode,  ["none","some"], lastRem);
-    lastKind = kind; lastRem = rem;
-
-    var pool = POOLS[kind][rem];
-    var pick, t = 0;
-    do{
-      pick = pool[Math.floor(Math.random()*pool.length)];
-      t++;
-    }while(pool.length > 1 && pick[0] === lastN && t < 40);
-    lastN = pick[0];
-
-    var place = askPlace();   // 商1けたがありうるときだけ位をえらばせる
-    // 商に0が立つ形も 筆算の組み立ては 商2けたと同じ
-    return (kind === "one") ? oneDigit(pick[0], pick[1], place)
-                            : twoDigit(pick[0], pick[1], place);
+    var rem = pickCat(remMode, ["none","some"], lastRem);
+    lastRem = rem;
+    var n, v, t = 0;
+    if(divMode === "d1"){
+      var kind = pickCat(kindMode, ["two","one","zero"], lastKind);
+      lastKind = kind;
+      var pool = POOLS1[kind][rem], pick;
+      do{ pick = pool[Math.floor(Math.random()*pool.length)]; t++; }
+      while(pool.length > 1 && pick[0] === lastN && t < 40);
+      n = pick[0]; v = pick[1];
+    }else{
+      var nwSel = pickCat(nwMode, ["round","n2","n3"], lastNw);
+      lastNw = nwSel;
+      var p2;
+      do{ p2 = d2Pick(nwSel, rem); t++; } while(p2[0] === lastN && t < 40);
+      n = p2[0]; v = p2[1];
+    }
+    lastN = n;
+    return buildProblem(n, v, askPlace());
   }
 
   var P = makeProblem();
 
-  /* ---------- 筆算を 組み立てる ---------- */
+  /* ---------- 筆算を組み立てる ---------- */
   var hissan = document.getElementById("hissan");
-  var cellEl = {};
+  var cellEl = {}, ruleEls = [], noteEl = null;
 
   function buildBoard(){
     hissan.innerHTML = "";
-    cellEl = {};
+    cellEl = {}; ruleEls = [];
 
-    function put(row, col, cls, text, id){
+    var cols = P.dw + P.nw;
+    hissan.style.setProperty("--cols", cols);
+    hissan.style.gridTemplateColumns = "repeat(" + cols + ", var(--cw))";
+    hissan.style.gridTemplateRows    = "repeat(" + P.rows + ", var(--ch))";
+
+    function make(gRow, gCol, cls, text, id){
       var d = document.createElement("div");
       d.className = "cell " + (cls||"");
-      d.style.gridRow = row;
-      d.style.gridColumn = col;
+      d.style.gridRow = gRow;
+      d.style.gridColumn = gCol;
       var sp = document.createElement("span");
       sp.className = "val";
       sp.textContent = (text == null ? "" : text);
       d.appendChild(sp);
       if(id){
         cellEl[id] = d;
-        if(id === "q0" || id === "q1"){
+        if(id.indexOf("c0_") === 0){
           d.setAttribute("role","button");
           d.addEventListener("click", function(){ selectCell(id); });
         }
@@ -689,50 +789,54 @@ body{
       return d;
     }
 
-    put(1, 2, "slot", "", "q0");
-    put(1, 3, "slot", "", "q1");
+    // わる数（左側）
+    var vs = String(P.v);
+    for(var a=0; a<P.dw; a++) make(2, 1+a, "given", vs.charAt(a));
 
-    put(2, 1, "given", P.v);
-    put(2, 2, "given dvd-l", P.d0);
-    put(2, 3, "given dvd-r", P.d1);
+    // わられる数（かっこの中）
+    for(var j=0; j<P.nw; j++){
+      make(2, P.dw+1+j, "given " + (j===0 ? "dvd-l" : "dvd-r"), P.D[j]);
+    }
 
-    put(3, 2, "slot", "", "m1t");
-    put(3, 3, "slot", "", "m1o");
-    put(4, 2, "slot", "", "s1t");
-    put(4, 3, "slot", "", "s1o");
-    put(5, 2, "slot", "", "m2t");
-    put(5, 3, "slot", "", "m2o");
-    put(6, 2, "slot", "", "s2t");
-    put(6, 3, "slot", "", "s2o");
+    // 書きこむマス
+    var editRows = [0];
+    for(var rr=2; rr<P.rows; rr++) editRows.push(rr);
+    editRows.forEach(function(row){
+      for(var j2=0; j2<P.nw; j2++){
+        make(row+1, P.dw+1+j2, "slot", "", "c"+row+"_"+j2);
+      }
+    });
 
-    var r1 = document.createElement("div");
-    r1.className = "rule"; r1.style.gridRow = 3; r1.id = "rule1";
-    hissan.appendChild(r1);
-    var r2 = document.createElement("div");
-    r2.className = "rule"; r2.style.gridRow = 5; r2.id = "rule2";
-    hissan.appendChild(r2);
+    // ひき算の線（段ごとに、その段の計算はばだけ）
+    P.stages.forEach(function(st, i){
+      var el = document.createElement("div");
+      el.className = "rule";
+      el.style.gridRow = 3 + 2*i;
+      el.style.gridColumn = (P.dw+1) + " / " + (P.dw + 2 + st.col);
+      hissan.appendChild(el);
+      ruleEls.push(el);
+    });
 
-    // 「あまり」のふだ（できあがってから、あまりがあるときだけ出す）
-    var note = document.createElement("div");
-    note.className = "note hidden";
-    note.id = "remNote";
-    note.style.gridRow = (P.kind === "two") ? 6 : 4;
-    note.style.gridColumn = 1;
-    note.textContent = "あまり";
-    hissan.appendChild(note);
+    // 「あまり」のふだ
+    noteEl = document.createElement("div");
+    noteEl.className = "note hidden";
+    noteEl.style.gridRow = P.rows;
+    noteEl.style.gridColumn = "1 / span " + P.dw;
+    noteEl.textContent = "あまり";
+    hissan.appendChild(noteEl);
   }
 
-  /* ---------- 画面を ぬりかえる ---------- */
-  var setBtn   = document.getElementById("setBtn");
-  var setLbl   = document.getElementById("setLabel");
-  var chipsEl  = document.getElementById("chips");
-  var whereEl  = document.getElementById("where");
-  var guideEl  = document.getElementById("guide");
-  var subEl    = document.getElementById("sub");
-  var countEl  = document.getElementById("count");
-  var padEl    = document.getElementById("pad");
-  var nextBtn  = document.getElementById("nextBtn");
-  var maruEl   = document.getElementById("maru");
+  /* ---------- 画面 ---------- */
+  var setBtn  = document.getElementById("setBtn");
+  var setLbl  = document.getElementById("setLabel");
+  var chipsEl = document.getElementById("chips");
+  var whereEl = document.getElementById("where");
+  var guideEl = document.getElementById("guide");
+  var subEl   = document.getElementById("sub");
+  var countEl = document.getElementById("count");
+  var padEl   = document.getElementById("pad");
+  var nextBtn = document.getElementById("nextBtn");
+  var maruEl  = document.getElementById("maru");
 
   function render(keepSub){
     var step    = P.done ? null : P.steps[P.si];
@@ -741,7 +845,6 @@ body{
 
     setLbl.textContent = setLabel();
 
-    // 工程チップ
     chipsEl.innerHTML = "";
     STEPNAMES.forEach(function(name){
       var c = document.createElement("div");
@@ -753,18 +856,16 @@ body{
 
     whereEl.textContent = P.done ? "できあがり"
       : (isPlace ? "商はどの位に立つ？"
-        : (P.kind === "one" ? "一の位の計算"
-          : (P.si <= 3 ? "十の位の計算" : "一の位の計算")));
+                 : (ketaName(P.stages[step.stage].col, P.nw) + "の計算"));
 
-    // マス
     for(var id in cellEl){
       var el = cellEl[id];
-      var v  = P.filled[id];
-      el.querySelector(".val").textContent = (v == null ? "" : v);
+      var vv = P.filled[id];
+      el.querySelector(".val").textContent = (vv == null ? "" : vv);
       el.classList.remove("active","pending","choose");
       if(P.done || !step) continue;
       if(isPlace){
-        if(id === "q0" || id === "q1"){
+        if(P.placeCells.indexOf(id) >= 0){
           el.classList.add(id === P.sel ? "active" : "choose");
         }
       }else{
@@ -773,15 +874,13 @@ body{
       }
     }
 
-    // ひき算の線（商1けたのときは1本だけ）
-    document.getElementById("rule1").classList.toggle("show", P.si >= 2);
-    document.getElementById("rule2").classList.toggle("show",
-      P.kind === "two" && P.si >= 6);
+    // ひき算の線は、その段のかけ算が終わったら出す
+    ruleEls.forEach(function(el, i){
+      el.classList.toggle("show", P.doneStages > i || P.done);
+    });
 
-    // 「あまり」のふだ
-    document.getElementById("remNote").classList.toggle("hidden", !(P.done && P.r > 0));
+    noteEl.classList.toggle("hidden", !(P.done && P.r > 0));
 
-    // メッセージ
     if(P.done){
       guideEl.textContent = P.mistakes === 0 ? "せいかい！ ノーミス！" : "せいかい！";
       subEl.className = "sub";
@@ -799,17 +898,12 @@ body{
                         + "　連続 " + rec.streak;
   }
 
-  function say(cls, text){
-    subEl.className = "sub " + cls;
-    subEl.textContent = text;
-  }
+  function say(cls, text){ subEl.className = "sub " + cls; subEl.textContent = text; }
 
-  /* ---------- 商を立てる位をえらぶ ---------- */
   function selectCell(id){
     if(P.done) return;
-    var step = P.steps[P.si];
-    if(!step.place) return;
-    if(id !== "q0" && id !== "q1") return;
+    if(!P.steps[P.si].place) return;
+    if(P.placeCells.indexOf(id) < 0) return;
     P.sel = id;
     render();
   }
@@ -817,20 +911,26 @@ body{
   /* ---------- まちがいの ことば ---------- */
   function wrongText(step, target, dig, placeErr){
     if(placeErr){
-      return (P.kind === "one")
-        ? "十の位の " + P.d0 + " は " + P.v + " より小さいね。十の位に商は立たないよ"
-        : "十の位の " + P.d0 + " は " + P.v + " でわれるよ。商は十の位から立つね";
-    }
-    if(step.k === "たてる" && step.into != null){
-      var want = P.exp[target];
-      if(want === 0){
-        return step.into + " は " + P.v + " でわれないね。わられないときは 0 を立てるよ";
+      var head = Number(String(P.n).slice(0, P.dw));
+      var rightCol = Number(step.cells[0].split("_")[1]);
+      if(P.dw === 1){
+        return (rightCol > 0)
+          ? "十の位の " + head + " は " + P.v + " より小さいね。十の位に商は立たないよ"
+          : "十の位の " + head + " は " + P.v + " でわれるよ。商は十の位から立つね";
       }
-      return (dig > want)
-        ? "大きすぎるよ。" + dig + " × " + P.v + " = " + (dig*P.v) + " で、" + step.into + " より大きいね"
-        : "小さすぎるよ。ひいたあとが まだ " + P.v + " でわれてしまうね";
+      return (rightCol > P.dw - 1)
+        ? "はじめの " + P.dw + "けた " + head + " は " + P.v + " より小さいね。そこには商が立たないよ"
+        : "はじめの " + P.dw + "けた " + head + " は " + P.v + " でわれるよ。商はそこから立つね";
     }
-    if(step.k === "ひく" && dig >= P.v){
+    if(step.k === "たてる"){
+      var want = P.exp[target];
+      if(want === 0) return step.into + " は " + P.v + " でわれないね。わられないときは 0 を立てるよ";
+      return (dig > want)
+        ? "大きすぎるよ。" + dig + " × " + P.v + " = " + (dig*P.v) + " で、"
+          + step.into + " より大きいね。1つ小さくしてみよう"
+        : "小さすぎるよ。ひいたあとが まだ " + P.v + " でわれてしまうね。1つ大きくしてみよう";
+    }
+    if(step.k === "ひく" && P.v <= 9 && dig >= P.v){
       return (step.last ? "あまりは " : "ひいたあとは ")
            + "わる数の " + P.v + " より小さくなるはずだよ";
     }
@@ -844,16 +944,12 @@ body{
     var target, placeErr = false;
 
     if(step.place){
-      if(!P.sel){
-        say("warn", "まず、商を書くマスをタップしてね");
-        return;
-      }
+      if(!P.sel){ say("warn", "まず、商を書くマスをタップしてね"); return; }
       target = P.sel;
       if(target !== step.cells[0]) placeErr = true;
     }else{
       target = step.cells[P.ci];
     }
-
     var el = cellEl[target];
 
     if(!placeErr && P.exp[target] === dig){
@@ -861,17 +957,16 @@ body{
       el.classList.remove("wrong");
       el.classList.add("just");
       setTimeout(function(){ el.classList.remove("just"); }, 320);
-
       P.ci++;
       if(P.ci >= step.cells.length){
         P.ci = 0; P.si++; P.sel = null;
+        if(step.k === "かける") P.doneStages++;
         if(P.si >= P.steps.length) finish();
       }
       render();
       return;
     }
 
-    // まちがい
     P.mistakes++;
     var ekey = placeErr ? "立てる位"
              : (step.k === "たてる" && P.exp[target] === 0) ? "0を立てる"
@@ -884,20 +979,14 @@ body{
     say("warn", wrongText(step, target, dig, placeErr));
     if(placeErr) P.sel = null;
 
-    setTimeout(function(){
-      el.classList.remove("wrong");
-      render(true);          // えらび直しを反映しつつ ことばは残す
-    }, 700);
+    setTimeout(function(){ el.classList.remove("wrong"); render(true); }, 700);
   }
 
-  function showHint(){
-    if(P.done) return;
-    say("hint", "ヒント：" + P.steps[P.si].hint);
-  }
+  function showHint(){ if(!P.done) say("hint", "ヒント：" + P.steps[P.si].hint); }
 
   function retry(){
     P.filled = {}; P.si = 0; P.ci = 0; P.sel = null;
-    P.mistakes = 0; P.done = false;
+    P.mistakes = 0; P.done = false; P.doneStages = 0;
     maruEl.classList.add("hidden");
     render();
   }
@@ -906,26 +995,21 @@ body{
   function flowerPath(cx, cy, r, petals){
     var d = "", R = r*1.28;
     for(var i=0;i<petals;i++){
-      var a0 = (i/petals)*Math.PI*2 - Math.PI/2;
-      var a1 = ((i+1)/petals)*Math.PI*2 - Math.PI/2;
-      var ca = a0 + (a1-a0)*0.28, cb = a0 + (a1-a0)*0.72;
-      var x0 = cx + r*Math.cos(a0), y0 = cy + r*Math.sin(a0);
-      var x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1);
-      var xa = cx + R*Math.cos(ca), ya = cy + R*Math.sin(ca);
-      var xb = cx + R*Math.cos(cb), yb = cy + R*Math.sin(cb);
-      if(i === 0) d += "M" + x0.toFixed(1) + " " + y0.toFixed(1);
-      d += "C" + xa.toFixed(1) + " " + ya.toFixed(1) + " "
-              + xb.toFixed(1) + " " + yb.toFixed(1) + " "
-              + x1.toFixed(1) + " " + y1.toFixed(1);
+      var a0=(i/petals)*Math.PI*2 - Math.PI/2, a1=((i+1)/petals)*Math.PI*2 - Math.PI/2;
+      var ca=a0+(a1-a0)*0.28, cb=a0+(a1-a0)*0.72;
+      var x0=cx+r*Math.cos(a0), y0=cy+r*Math.sin(a0);
+      var x1=cx+r*Math.cos(a1), y1=cy+r*Math.sin(a1);
+      var xa=cx+R*Math.cos(ca), ya=cy+R*Math.sin(ca);
+      var xb=cx+R*Math.cos(cb), yb=cy+R*Math.sin(cb);
+      if(i===0) d += "M"+x0.toFixed(1)+" "+y0.toFixed(1);
+      d += "C"+xa.toFixed(1)+" "+ya.toFixed(1)+" "+xb.toFixed(1)+" "+yb.toFixed(1)
+         + " "+x1.toFixed(1)+" "+y1.toFixed(1);
     }
     return d + "Z";
   }
-
   function drawMaru(perfect){
-    var d = perfect ? flowerPath(100, 100, 74, 9)
-                    : "M100 26 A74 74 0 1 1 99.9 26 Z";
-    maruEl.innerHTML = '<svg viewBox="0 0 200 200" aria-hidden="true"><path d="'
-                     + d + '"></path></svg>';
+    var d = perfect ? flowerPath(100,100,74,9) : "M100 26 A74 74 0 1 1 99.9 26 Z";
+    maruEl.innerHTML = '<svg viewBox="0 0 200 200" aria-hidden="true"><path d="'+d+'"></path></svg>';
     maruEl.classList.remove("hidden");
     var path = maruEl.querySelector("path");
     var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -933,28 +1017,22 @@ body{
       var len = path.getTotalLength();
       path.style.strokeDasharray = len;
       path.style.strokeDashoffset = len;
-      path.animate(
-        [{strokeDashoffset:len},{strokeDashoffset:0}],
-        {duration:750, easing:"cubic-bezier(.3,.7,.3,1)", fill:"forwards"}
-      );
+      path.animate([{strokeDashoffset:len},{strokeDashoffset:0}],
+        {duration:750, easing:"cubic-bezier(.3,.7,.3,1)", fill:"forwards"});
     }
   }
-
   function finish(){
     P.done = true;
     rec.solved++;
     if(P.mistakes === 0){
-      rec.perfect++;
-      rec.streak++;
+      rec.perfect++; rec.streak++;
       if(rec.streak > rec.best) rec.best = rec.streak;
-    }else{
-      rec.streak = 0;
-    }
+    }else{ rec.streak = 0; }
     save();
     drawMaru(P.mistakes === 0);
   }
 
-  /* ---------- シート（共通） ---------- */
+  /* ---------- シート ---------- */
   function openSheet(html, label, mount, opener){
     var sheet = document.createElement("div");
     sheet.className = "sheet";
@@ -968,88 +1046,86 @@ body{
     if(mount) mount(sheet, close);
     return sheet;
   }
-
-  /* ---------- せっていシート ---------- */
   function segHTML(id, items, cur){
-    return '<div class="segs" id="' + id + '">'
-      + items.map(function(it){
-          return '<button class="mode" type="button" data-id="' + it.id + '" aria-pressed="'
-               + (it.id === cur) + '">' + it.label + '</button>';
-        }).join("")
-      + '</div>';
+    return '<div class="segs" id="'+id+'">' + items.map(function(it){
+      return '<button class="mode" type="button" data-id="'+it.id+'" aria-pressed="'
+           + (it.id===cur) + '">' + it.label + '</button>';
+    }).join("") + '</div>';
   }
 
   setBtn.addEventListener("click", function(){
     var html = '<h2>もんだいの種類</h2>'
-      + '<h3>商の形</h3>' + segHTML("segKind", KINDS, kindMode)
-      + '<h3>あまり</h3>'     + segHTML("segRem",  REMS,  remMode)
+      + '<h3>わる数のけた数</h3>' + segHTML("segDiv", DIVS, divMode)
+      + '<div id="subAxis"></div>'
+      + '<h3>あまり</h3>' + segHTML("segRem", REMS, remMode)
       + '<p class="empty" id="poolInfo"></p>'
-      + '<div class="sheet-actions">'
-      +   '<button class="sheet-close" id="closeSheet">とじる</button>'
-      + '</div>';
+      + '<div class="sheet-actions"><button class="sheet-close" id="closeSheet">とじる</button></div>';
 
     openSheet(html, "もんだいの種類", function(sheet){
       var info = sheet.querySelector("#poolInfo");
-      function refresh(){
-        info.textContent = "いま出るのは " + poolCount() + " 通り。"
-          + (askPlace()
-              ? "商を立てる位は、子どもがえらびます。"
-              : "商は必ず十の位から立つので、書く位置はアプリが決めます。");
-        ["segKind","segRem"].forEach(function(gid){
-          var cur = (gid === "segKind") ? kindMode : remMode;
-          sheet.querySelectorAll("#" + gid + " .mode").forEach(function(b){
-            b.setAttribute("aria-pressed", String(b.getAttribute("data-id") === cur));
+      var subAxis = sheet.querySelector("#subAxis");
+
+      function bind(gid, onPick){
+        sheet.querySelectorAll("#"+gid+" .mode").forEach(function(b){
+          b.addEventListener("click", function(){
+            onPick(b.getAttribute("data-id"));
+            saveSet(); refresh(); nextProblem();
           });
         });
       }
-      sheet.querySelectorAll("#segKind .mode").forEach(function(b){
-        b.addEventListener("click", function(){
-          kindMode = b.getAttribute("data-id"); saveSet(); refresh(); nextProblem();
+      function refresh(){
+        // まん中の軸は、わる数のけた数で意味が変わる
+        subAxis.innerHTML = (divMode === "d1")
+          ? '<h3>商の形</h3>' + segHTML("segKind", KINDS, kindMode)
+          : '<h3>もんだいの形</h3>' + segHTML("segNw", NWS, nwMode);
+        if(divMode === "d1") bind("segKind", function(id){ kindMode = id; });
+        else                 bind("segNw",   function(id){ nwMode = id; });
+
+        ["segDiv","segRem"].forEach(function(gid){
+          var cur = (gid==="segDiv") ? divMode : remMode;
+          sheet.querySelectorAll("#"+gid+" .mode").forEach(function(b){
+            b.setAttribute("aria-pressed", String(b.getAttribute("data-id") === cur));
+          });
         });
-      });
-      sheet.querySelectorAll("#segRem .mode").forEach(function(b){
-        b.addEventListener("click", function(){
-          remMode = b.getAttribute("data-id"); saveSet(); refresh(); nextProblem();
-        });
-      });
+
+        info.textContent = "いま出るのは " + poolCount().toLocaleString() + " 通り。"
+          + (divMode === "d2"
+              ? "わる数を何十とみて見当をつけ、合わなければ1つずつ直します。"
+              : (askPlace() ? "商を立てる位は、子どもがえらびます。"
+                            : "商は必ず十の位から立つので、書く位置はアプリが決めます。"));
+      }
+      bind("segDiv", function(id){ divMode = id; });
+      bind("segRem", function(id){ remMode = id; });
       refresh();
     }, setBtn);
   });
 
-  /* ---------- きろくシート ---------- */
   var recBtn = document.getElementById("recBtn");
   recBtn.addEventListener("click", function(){
     var total = 0;
     ERRKEYS.forEach(function(k){ total += (rec.errors[k]|0); });
-
     var bars = ERRKEYS.map(function(k){
-      var n = rec.errors[k]|0;
-      var w = total ? Math.round(n/total*100) : 0;
-      return '<div class="bar-row"><span>' + k + '</span>'
-           + '<div class="bar-track"><div class="bar-fill" style="width:' + w + '%"></div></div>'
-           + '<span class="bar-num">' + n + '</span></div>';
+      var n = rec.errors[k]|0, w = total ? Math.round(n/total*100) : 0;
+      return '<div class="bar-row"><span>'+k+'</span>'
+           + '<div class="bar-track"><div class="bar-fill" style="width:'+w+'%"></div></div>'
+           + '<span class="bar-num">'+n+'</span></div>';
     }).join("");
-
-    var html = ''
-      + '<h2>きろく</h2>'
+    var html = '<h2>きろく</h2>'
       + '<div class="stat-row">'
-      +   '<div class="stat"><b>' + rec.solved  + '</b><span>といた数</span></div>'
-      +   '<div class="stat"><b>' + rec.perfect + '</b><span>花丸</span></div>'
-      +   '<div class="stat"><b>' + rec.best    + '</b><span>連続さいこう</span></div>'
+      +   '<div class="stat"><b>'+rec.solved +'</b><span>といた数</span></div>'
+      +   '<div class="stat"><b>'+rec.perfect+'</b><span>花丸</span></div>'
+      +   '<div class="stat"><b>'+rec.best   +'</b><span>連続さいこう</span></div>'
       + '</div>'
       + '<h3>つまずいた工程</h3>'
-      + (total ? '<div class="bars">' + bars + '</div>'
+      + (total ? '<div class="bars">'+bars+'</div>'
                : '<p class="empty">まだ まちがいは ありません。</p>')
       + '<div class="sheet-actions">'
       +   '<button class="sheet-close" id="closeSheet">とじる</button>'
       +   '<button class="linkbtn danger" id="resetRec">きろくを消す</button>'
       + '</div>';
-
     openSheet(html, "きろく", function(sheet, close){
       sheet.querySelector("#resetRec").addEventListener("click", function(){
-        if(confirm("きろくを すべて 消しますか？")){
-          rec = blank(); save(); close(); render();
-        }
+        if(confirm("きろくを すべて 消しますか？")){ rec = blank(); save(); close(); render(); }
       });
     }, recBtn);
   });
@@ -1059,33 +1135,29 @@ body{
     padEl.innerHTML = "";
     [1,2,3,4,5,6,7,8,9].forEach(function(d){
       var b = document.createElement("button");
-      b.className = "key"; b.type = "button"; b.textContent = d;
+      b.className="key"; b.type="button"; b.textContent=d;
       b.addEventListener("click", function(){ press(d); });
       padEl.appendChild(b);
     });
     var h = document.createElement("button");
-    h.className = "key util"; h.type = "button"; h.textContent = "ヒント";
-    h.addEventListener("click", showHint);
-    padEl.appendChild(h);
-
+    h.className="key util"; h.type="button"; h.textContent="ヒント";
+    h.addEventListener("click", showHint); padEl.appendChild(h);
     var z = document.createElement("button");
-    z.className = "key"; z.type = "button"; z.textContent = "0";
-    z.addEventListener("click", function(){ press(0); });
-    padEl.appendChild(z);
-
+    z.className="key"; z.type="button"; z.textContent="0";
+    z.addEventListener("click", function(){ press(0); }); padEl.appendChild(z);
     var r = document.createElement("button");
-    r.className = "key util"; r.type = "button"; r.textContent = "やりなおす";
-    r.addEventListener("click", retry);
-    padEl.appendChild(r);
+    r.className="key util"; r.type="button"; r.textContent="やりなおす";
+    r.addEventListener("click", retry); padEl.appendChild(r);
   }
 
   document.addEventListener("keydown", function(e){
-    if(document.querySelector(".sheet")) return;   // シートが開いているときは何もしない
+    if(document.querySelector(".sheet")) return;
     if(e.key >= "0" && e.key <= "9"){ press(parseInt(e.key,10)); }
     else if(e.key === "Enter" && P.done){ nextProblem(); }
     else if(!P.done && P.steps[P.si].place){
-      if(e.key === "ArrowLeft"){ selectCell("q0"); e.preventDefault(); }
-      else if(e.key === "ArrowRight"){ selectCell("q1"); e.preventDefault(); }
+      var i = P.placeCells.indexOf(P.sel);
+      if(e.key === "ArrowLeft"){  selectCell(P.placeCells[Math.max(0, (i<0?1:i)-1)]); e.preventDefault(); }
+      else if(e.key === "ArrowRight"){ selectCell(P.placeCells[Math.min(P.placeCells.length-1, i+1)]); e.preventDefault(); }
     }
   });
 
