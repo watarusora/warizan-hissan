@@ -232,6 +232,8 @@ body{
 }
 /* 左肩 */
 .carrybox.left{ right:auto; left:calc(var(--cw) * 0.02); }
+/* 使い終わった肩は薄くして、いま見るべき数だけが目立つようにする */
+.carrybox.used{ opacity:.3; }
 .carrybox.pending{border-color:var(--line)}
 .carrybox.active{
   border:2px solid var(--blue);
@@ -837,6 +839,7 @@ body{
       var topId = function(col){ return (i === 0) ? ("d_"+col) : ("c"+(1+2*i)+"_"+col); };
       var hcells = [], hwant = [], hinfo = [];
       var hadd = function(cell, want, info){ hcells.push(cell); hwant.push(want); hinfo.push(info); };
+      var hikuIdx = steps.length;   // このあと push される ひく の工程番号
       var doneR = {};
       for(var j3 = st.col; j3 >= aStart; j3--){
         var inf = sub[j3];
@@ -851,7 +854,7 @@ body{
               doneR[k3] = 1;
               var rid = "b" + i + "_r" + k3;
               exp[rid] = ek % 10;
-              borrowCells.push({id:rid, side:"r", host:topId(k3), strike:true});
+              borrowCells.push({id:rid, side:"r", host:topId(k3), strike:true, stepIdx:hikuIdx});
               hadd(rid, ek % 10, {kind:"down", a:ik.a, eff:ek, forCol:j3});
             }
             if(ik.needBorrow) k3--; else break;
@@ -859,7 +862,7 @@ body{
           // つぎに この位の左肩に 1 をつけて 1X と見立てる
           var lid = "b" + i + "_l" + j3;
           exp[lid] = 1;
-          borrowCells.push({id:lid, side:"l", host:topId(j3), strike:false});
+          borrowCells.push({id:lid, side:"l", host:topId(j3), strike:false, stepIdx:hikuIdx});
           hadd(lid, 1, {kind:"lend10", a:inf.a, b:inf.b, eff:effFull});
         }
         if(j3 >= diffStart){
@@ -1098,9 +1101,19 @@ body{
 
     // 右肩に新しい数を書いたら、もとの数を消す
     P.borrowCells.forEach(function(bc){
-      if(!bc.strike) return;
-      var h = cellEl[bc.host];
-      if(h) h.classList.toggle("struck", P.filled[bc.id] != null);
+      if(bc.strike){
+        var h = cellEl[bc.host];
+        if(h) h.classList.toggle("struck", P.filled[bc.id] != null);
+      }
+      // ひくの工程が終わったら 薄くする
+      var be = cellEl[bc.id];
+      if(be) be.classList.toggle("used", P.done || P.si > bc.stepIdx);
+    });
+
+    // かけ算の肩は、その位のマスが決まったら 薄くする
+    P.carryCells.forEach(function(cc){
+      var ce = cellEl[cc.id];
+      if(ce) ce.classList.toggle("used", P.filled[cc.host] != null);
     });
 
     noteEl.classList.toggle("hidden", !(P.done && P.r > 0));
