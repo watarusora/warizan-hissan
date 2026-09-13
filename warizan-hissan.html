@@ -755,56 +755,78 @@ body{
                        + " で見当をつけよう。合わなければ 1つずつ直すよ"))});
 
       // かけ算：わる数が2けた以上なら 一の位から。くり上がりも書く
-      var kcells = prodIds, kinfo = {};
-      // 商が0の段は 積が「0」1けただけなので、けたごとの組み立ては要らない
+      var kcells = prodIds, kwant = null, kinfo = null;
       if(dw >= 2 && st.q > 0){
         var Vd = String(v).split("").map(Number);
         var cs = [], cr = 0;
         for(var k2 = dw-1; k2 >= 0; k2--){
-          var tt = Vd[k2]*st.q + cr;
-          cr = Math.floor(tt/10);
-          if(k2 > 0) cs[k2-1] = cr;      // Vd[k2-1] の右肩に書くくり上がり
+          var tt0 = Vd[k2]*st.q + cr;
+          cr = Math.floor(tt0/10);
+          if(k2 > 0) cs[k2-1] = cr;
         }
-        var lead = cr, rev = prodIds.slice().reverse();
-        kcells = [];
+        var rev = prodIds.slice().reverse();     // 一の位から
+        kcells = []; kwant = []; kinfo = [];
+        var add = function(cell, want, info){ kcells.push(cell); kwant.push(want); kinfo.push(info); };
+
         for(var m = 0; m < dw; m++){
-          var ki = dw-1-m;
-          var cin = (ki === dw-1) ? 0 : cs[ki];
-          var tt2 = Vd[ki]*st.q + cin;
-          // 56×4 なら 6×4=24 なので、先に くり上がりの 2 を書いてから 4 を書く
-          if(ki > 0 && cs[ki-1] > 0 && carryMode === "on"){
-            var cid = "k" + i + "_" + (ki-1);
-            exp[cid] = cs[ki-1];
-            // くり上がりは、それを足しこむ「積のけた」の右肩に置く
-            carryCells.push({id:cid, stage:i, host:"c" + prodRow + "_" + (st.col - dw + ki)});
-            kinfo[cid] = {kind:"carry", d:Vd[ki], q:st.q, t:tt2, val:cs[ki-1]};
-            kcells.push(cid);
+          var ki   = dw-1-m;
+          var cin  = (ki === dw-1) ? 0 : cs[ki];
+          var base = Vd[ki]*st.q;                // くり上がりを足す前
+          var tot  = base + cin;
+
+          if(ki > 0){
+            // 途中のけた：くり上がりを先に書いてから、積のそのけた
+            if(cs[ki-1] > 0 && carryMode === "on"){
+              var cid = "k" + i + "_" + (ki-1);
+              exp[cid] = cs[ki-1];
+              carryCells.push({id:cid, stage:i, host:"c" + prodRow + "_" + (st.col - dw + ki)});
+              add(cid, cs[ki-1], {kind:"carry", d:Vd[ki], q:st.q, t:tot, val:cs[ki-1]});
+            }
+            add(rev[m], tot % 10, {kind:"digit", d:Vd[ki], q:st.q, carryIn:cin, t:tot});
+          }else if(carryMode === "on" && cin > 0){
+            // いちばん左：まず かけ算の答えをそのまま左から書き、あとでくり上がりを足して直す
+            var bs = String(base);
+            for(var b2 = 0; b2 < bs.length; b2++){
+              add(rev[dw-1 + (bs.length-1-b2)], Number(bs.charAt(b2)),
+                  {kind:"base", d:Vd[0], q:st.q, base:base});
+            }
+            add(rev[dw-1], tot % 10,
+                {kind:"fix", was:base % 10, addv:cin, base:base, tot:tot, top:false});
+            if((base % 10) + cin >= 10){
+              add(rev[dw], Math.floor(tot/10),
+                  {kind:"fix", was:Math.floor(base/10), addv:1, base:base, tot:tot, top:true});
+            }
+          }else{
+            // くり上がりを書かない設定、またはくり上がりなし：出た数をそのまま左から
+            var ts = String(tot);
+            for(var b3 = 0; b3 < ts.length; b3++){
+              add(rev[dw-1 + (ts.length-1-b3)], Number(ts.charAt(b3)),
+                  {kind:"digit", d:Vd[0], q:st.q, carryIn:cin, t:tot, top:(b3 === 0 && ts.length > 1)});
+            }
           }
-          kinfo[rev[m]] = {kind:"digit", d:Vd[ki], q:st.q, carryIn:cin, t:tt2};
-          // いちばん左のけたは、出た数をそのまま左から書く（58 なら 5 → 8）
-          if(ki === 0 && lead > 0){
-            kinfo[rev[dw]] = {kind:"digit", d:Vd[0], q:st.q, carryIn:cin, t:tt2, top:true};
-            kcells.push(rev[dw]);
-          }
-          kcells.push(rev[m]);
         }
       }
-      steps.push({k:"かける", stage:i, cells:kcells, kinfo:kinfo,
+      steps.push({k:"かける", stage:i, cells:kcells, want:kwant, kinfo:kinfo,
         guide:"たてた商と、わる数をかけよう" + (dw >= 2 ? "。一の位から" : ""),
         hint: st.q + " × " + v + " は？",
-        hintFor: (dw < 2) ? null : function(cellId){
-          var f = kinfo[cellId];
+        hintFor: (dw < 2 || !kinfo) ? null : function(cellId, idx){
+          var f = kinfo[idx];
           if(!f) return st.q + " × " + v + " は？";
           if(f.kind === "carry"){
             return f.d + " × " + f.q + " = " + f.t + "。くり上がりの " + f.val
                  + " を 先に右肩へ小さく書こう";
           }
-          if(f.top){
-            return (f.carryIn
-                     ? (f.d + " × " + f.q + " に くり上がりの " + f.carryIn + " をたして " + f.t)
-                     : (f.d + " × " + f.q + " = " + f.t))
-                 + "。左から書くので、まず " + Math.floor(f.t/10) + " だよ";
+          if(f.kind === "base"){
+            return f.d + " × " + f.q + " = " + f.base + "。まず " + f.base + " をそのまま左から書くよ";
           }
+          if(f.kind === "fix"){
+            return f.top
+              ? ("くり上がった 1 を、さきに書いた " + f.was + " にたして " + (f.was+1) + " に直そう")
+              : ("書いた " + f.was + " に くり上がりの " + f.addv + " をたして " + (f.was + f.addv)
+                 + "。このけたは " + (f.tot % 10) + " に直そう");
+          }
+          if(f.top) return f.d + " × " + f.q + (f.carryIn ? (" + " + f.carryIn) : "") + " = " + f.t
+                         + "。左から書くので、まず " + Math.floor(f.t/10) + " だよ";
           return f.carryIn
             ? (f.d + " × " + f.q + " に くり上がりの " + f.carryIn + " をたして " + f.t + "。その一の位を書くよ")
             : (f.d + " × " + f.q + " は？ その一の位を書くよ");
@@ -1067,9 +1089,19 @@ body{
         : "小さすぎるよ。ひいたあとが まだ " + P.v + " でわれてしまうね。1つ大きくしてみよう";
     }
     if(step.k === "かける" && step.kinfo){
-      var kf = step.kinfo[target];
+      var kf = step.kinfo[P.ci];
       if(kf){
         if(kf.kind === "carry") return "くり上がりは " + kf.t + " の十の位だよ";
+        if(kf.kind === "base"){
+          return "ここは まず " + kf.d + " × " + kf.q + " = " + kf.base
+               + " を そのまま書くよ。くり上がりは あとでたす";
+        }
+        if(kf.kind === "fix"){
+          return kf.top
+            ? ("くり上がった 1 を さきに書いた " + kf.was + " にたすと？")
+            : ("書いた " + kf.was + " に くり上がりの " + kf.addv + " をたすと "
+               + (kf.was + kf.addv) + "。このけたに入るのは その一の位だよ");
+        }
         if(kf.carryIn && dig === (kf.d * kf.q) % 10){
           return "くり上がりの " + kf.carryIn + " を たし忘れていないかな？";
         }
@@ -1107,7 +1139,8 @@ body{
     }
     var el = cellEl[target];
 
-    if(!placeErr && P.exp[target] === dig){
+    var want = (step.want && step.want[P.ci] != null) ? step.want[P.ci] : P.exp[target];
+    if(!placeErr && want === dig){
       P.filled[target] = dig;
       el.classList.remove("wrong");
       el.classList.add("just");
@@ -1140,7 +1173,7 @@ body{
   function showHint(){
     if(P.done) return;
     var step = P.steps[P.si];
-    var h = step.hintFor ? step.hintFor(step.cells[P.ci]) : step.hint;
+    var h = step.hintFor ? step.hintFor(step.cells[P.ci], P.ci) : step.hint;
     say("hint", "ヒント：" + h);
   }
 
