@@ -1105,9 +1105,7 @@ body{
         var h = cellEl[bc.host];
         if(h) h.classList.toggle("struck", P.filled[bc.id] != null);
       }
-      // ひくの工程が終わったら 薄くする
-      var be = cellEl[bc.id];
-      if(be) be.classList.toggle("used", P.done || P.si > bc.stepIdx);
+      // くり下がりの肩は 濃いまま残す（最後まで見せる）
     });
 
     // かけ算の肩は、その位のマスが決まったら 薄くする
