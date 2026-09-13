@@ -212,6 +212,34 @@ body{
 @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
 @keyframes pop{0%{transform:scale(.6);opacity:.3}60%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
 
+/* くり上がりを書く小さいマス（わる数のけたの右肩） */
+.carrybox{
+  position:absolute;
+  top:calc(var(--cw) * 0.04);
+  right:calc(var(--cw) * -0.10);
+  width:calc(var(--cw) * 0.44);
+  height:calc(var(--cw) * 0.44);
+  display:flex;align-items:center;justify-content:center;
+  border-radius:6px;
+  border:1.5px dashed transparent;
+  font-family:"Klee One","Hiragino Mincho ProN",serif;
+  font-weight:600;
+  font-size:calc(var(--cw) * 0.30);
+  line-height:1;
+  color:var(--blue);
+  z-index:3;
+  transition:border-color .18s, background .18s;
+}
+.carrybox.pending{border-color:var(--line)}
+.carrybox.active{
+  border:2px solid var(--blue);
+  background:var(--blue-soft);
+  animation:pulse 1.5s ease-in-out infinite;
+}
+.carrybox.wrong{animation:shake .34s}
+.carrybox.wrong .val{color:var(--red)}
+.carrybox.just .val{animation:pop .3s}
+
 /* 筆算の記号 */
 .dvd-l{
   border-left:3px solid var(--ink);
@@ -486,6 +514,7 @@ body{
   var MODEKEY = "warizan-hissan-mode";   // 商の形（わる数1けたのとき）
   var NWKEY   = "warizan-hissan-nw";     // わられる数のけた数（わる数2けたのとき）
   var REMKEY  = "warizan-hissan-rem";    // あまり
+  var CARKEY  = "warizan-hissan-carry";  // くり上がりを書くか
 
   var STEPNAMES = ["たてる","かける","ひく","おろす"];
   var ERRKEYS   = ["たてる","かける","ひく","おろす","立てる位","0を立てる"];
@@ -497,6 +526,7 @@ body{
   var NWS   = [{id:"round",label:"何十でわる"},{id:"n2",label:"2けた"},
                {id:"n3",label:"3けた"},{id:"mix",label:"まぜる"}];
   var REMS  = [{id:"none",label:"あまりなし"},{id:"some",label:"あまりあり"},{id:"mix",label:"まぜる"}];
+  var CARRIES = [{id:"on",label:"書く"},{id:"off",label:"書かない"}];
 
   /* ---------- きろく ---------- */
   function blank(){
@@ -519,7 +549,7 @@ body{
   function save(){ try{ localStorage.setItem(KEY, JSON.stringify(rec)); }catch(e){} }
 
   /* ---------- せってい ---------- */
-  var divMode="d1", kindMode="two", nwMode="n2", remMode="none";
+  var divMode="d1", kindMode="two", nwMode="n2", remMode="none", carryMode="on";
   function has(list,id){ return list.some(function(x){ return x.id===id; }); }
   (function load(){
     try{
@@ -527,6 +557,7 @@ body{
       var b=localStorage.getItem(MODEKEY); if(b && has(KINDS,b)) kindMode=b;
       var c=localStorage.getItem(NWKEY);   if(c && has(NWS,c))   nwMode=c;
       var d=localStorage.getItem(REMKEY);  if(d && has(REMS,d))  remMode=d;
+      var e2=localStorage.getItem(CARKEY); if(e2 && has(CARRIES,e2)) carryMode=e2;
     }catch(e){}
   })();
   function saveSet(){
@@ -535,6 +566,7 @@ body{
       localStorage.setItem(MODEKEY,kindMode);
       localStorage.setItem(NWKEY,nwMode);
       localStorage.setItem(REMKEY,remMode);
+      localStorage.setItem(CARKEY,carryMode);
     }catch(e){}
   }
 
@@ -687,7 +719,7 @@ body{
       return ids;
     }
 
-    var steps = [], prevDiffStart = 0;
+    var steps = [], prevDiffStart = 0, carryCells = [];
     stages.forEach(function(st, i){
       var prodRow = 2 + 2*i, diffRow = 3 + 2*i;
       var qid = "c0_" + st.col;
@@ -722,8 +754,45 @@ body{
                     : (v + " を およそ " + round + " とみて、" + st.into + " ÷ " + round
                        + " で見当をつけよう。合わなければ 1つずつ直すよ"))});
 
-      steps.push({k:"かける", stage:i, cells:prodIds,
-        guide:"たてた商と、わる数をかけよう", hint:st.q + " × " + v + " は？"});
+      // かけ算：わる数が2けた以上なら 一の位から。くり上がりも書く
+      var kcells = prodIds, kinfo = {};
+      // 商が0の段は 積が「0」1けただけなので、けたごとの組み立ては要らない
+      if(dw >= 2 && st.q > 0){
+        var Vd = String(v).split("").map(Number);
+        var cs = [], cr = 0;
+        for(var k2 = dw-1; k2 >= 0; k2--){
+          var tt = Vd[k2]*st.q + cr;
+          cr = Math.floor(tt/10);
+          if(k2 > 0) cs[k2-1] = cr;      // Vd[k2-1] の右肩に書くくり上がり
+        }
+        var lead = cr, rev = prodIds.slice().reverse();
+        kcells = [];
+        for(var m = 0; m < dw; m++){
+          var ki = dw-1-m;
+          var cin = (ki === dw-1) ? 0 : cs[ki];
+          kinfo[rev[m]] = {kind:"digit", d:Vd[ki], q:st.q, carryIn:cin, t:Vd[ki]*st.q + cin};
+          kcells.push(rev[m]);
+          if(ki > 0 && cs[ki-1] > 0 && carryMode === "on"){
+            var cid = "k" + i + "_" + (ki-1);
+            exp[cid] = cs[ki-1];
+            carryCells.push({id:cid, stage:i, idx:ki-1});
+            kinfo[cid] = {kind:"carry", d:Vd[ki], q:st.q, t:Vd[ki]*st.q + cin, val:cs[ki-1]};
+            kcells.push(cid);
+          }
+        }
+        if(lead > 0) kcells.push(rev[dw]);
+      }
+      steps.push({k:"かける", stage:i, cells:kcells, kinfo:kinfo,
+        guide:"たてた商と、わる数をかけよう" + (dw >= 2 ? "。一の位から" : ""),
+        hint: st.q + " × " + v + " は？",
+        hintFor: (dw < 2) ? null : function(cellId){
+          var f = kinfo[cellId];
+          if(!f) return st.q + " × " + v + " は？";
+          if(f.kind === "carry") return f.t + " の十の位 " + f.val + " を、右肩に小さく書こう";
+          return f.carryIn
+            ? (f.d + " × " + f.q + " に くり上がりの " + f.carryIn + " をたして " + f.t + "。その一の位を書くよ")
+            : (f.d + " × " + f.q + " は？ その一の位を書くよ");
+        }});
 
       steps.push({k:"ひく", stage:i, cells:diffIds.slice().reverse(), last:(i === qw-1),
         into:st.into, prod:st.prod, sub:sub,
@@ -754,7 +823,7 @@ body{
     }
 
     return {n:n, v:v, q:qv, r:rv, D:D, nw:nw, dw:dw, qw:qw, rows:R, s:s,
-            stages:stages, exp:exp, steps:steps, placeCells:placeCells,
+            stages:stages, exp:exp, steps:steps, placeCells:placeCells, carryCells:carryCells,
             filled:{}, si:0, ci:0, sel:null, mistakes:0, done:false, doneStages:0};
   }
 
@@ -828,8 +897,19 @@ body{
     }
 
     // わる数（左側）
-    var vs = String(P.v);
-    for(var a=0; a<P.dw; a++) make(2, 1+a, "given", vs.charAt(a));
+    var vs = String(P.v), divCells = [];
+    for(var a=0; a<P.dw; a++) divCells.push(make(2, 1+a, "given", vs.charAt(a)));
+
+    // くり上がりを書く小さいマス（わる数のけたの右肩）
+    P.carryCells.forEach(function(cc){
+      var box = document.createElement("div");
+      box.className = "carrybox";
+      var sp2 = document.createElement("span");
+      sp2.className = "val"; sp2.textContent = "";
+      box.appendChild(sp2);
+      divCells[cc.idx].appendChild(box);
+      cellEl[cc.id] = box;
+    });
 
     // わられる数（かっこの中）
     for(var j=0; j<P.nw; j++){
@@ -896,9 +976,15 @@ body{
       : (isPlace ? "商はどの位に立つ？"
                  : (ketaName(P.stages[step.stage].col, P.nw) + "の計算"));
 
+    var visStage = P.done ? (P.qw - 1) : step.stage;
     for(var id in cellEl){
       var el = cellEl[id];
       var vv = P.filled[id];
+      if(id.charAt(0) === "k" && Number(id.split("_")[0].slice(1)) !== visStage){
+        el.querySelector(".val").textContent = "";
+        el.classList.remove("active","pending");
+        continue;                       // ほかの段のくり上がりは見せない
+      }
       el.querySelector(".val").textContent = (vv == null ? "" : vv);
       el.classList.remove("active","pending","choose");
       if(P.done || !step) continue;
@@ -967,6 +1053,15 @@ body{
         ? "大きすぎるよ。" + dig + " × " + P.v + " = " + (dig*P.v) + " で、"
           + step.into + " より大きいね。1つ小さくしてみよう"
         : "小さすぎるよ。ひいたあとが まだ " + P.v + " でわれてしまうね。1つ大きくしてみよう";
+    }
+    if(step.k === "かける" && step.kinfo){
+      var kf = step.kinfo[target];
+      if(kf){
+        if(kf.kind === "carry") return "くり上がりは " + kf.t + " の十の位だよ";
+        if(kf.carryIn && dig === (kf.d * kf.q) % 10){
+          return "くり上がりの " + kf.carryIn + " を たし忘れていないかな？";
+        }
+      }
     }
     if(step.k === "ひく"){
       var info = step.sub && step.sub[Number(target.split("_")[1])];
@@ -1111,12 +1206,14 @@ body{
       + '<h3>わる数のけた数</h3>' + segHTML("segDiv", DIVS, divMode)
       + '<div id="subAxis"></div>'
       + '<h3>あまり</h3>' + segHTML("segRem", REMS, remMode)
+      + '<div id="carryAxis"></div>'
       + '<p class="empty" id="poolInfo"></p>'
       + '<div class="sheet-actions"><button class="sheet-close" id="closeSheet">とじる</button></div>';
 
     openSheet(html, "もんだいの種類", function(sheet){
       var info = sheet.querySelector("#poolInfo");
       var subAxis = sheet.querySelector("#subAxis");
+      var carryAxis = sheet.querySelector("#carryAxis");
 
       function bind(gid, onPick){
         sheet.querySelectorAll("#"+gid+" .mode").forEach(function(b){
@@ -1133,6 +1230,12 @@ body{
           : '<h3>もんだいの形</h3>' + segHTML("segNw", NWS, nwMode);
         if(divMode === "d1") bind("segKind", function(id){ kindMode = id; });
         else                 bind("segNw",   function(id){ nwMode = id; });
+
+        // くり上がりの書きこみは わる数2けたのときだけ意味がある
+        carryAxis.innerHTML = (divMode === "d2")
+          ? '<h3>くり上がりの書きこみ</h3>' + segHTML("segCar", CARRIES, carryMode)
+          : "";
+        if(divMode === "d2") bind("segCar", function(id){ carryMode = id; });
 
         ["segDiv","segRem"].forEach(function(gid){
           var cur = (gid==="segDiv") ? divMode : remMode;
