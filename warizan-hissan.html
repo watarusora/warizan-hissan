@@ -212,21 +212,21 @@ body{
 @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
 @keyframes pop{0%{transform:scale(.6);opacity:.3}60%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
 
-/* くり上がりを書く小さいマス（わる数のけたの右肩） */
+/* くり上がりを書く小さいマス（くり上がりを足しこむけたの右肩） */
 .carrybox{
   position:absolute;
-  top:calc(var(--cw) * 0.04);
-  right:calc(var(--cw) * -0.10);
-  width:calc(var(--cw) * 0.44);
-  height:calc(var(--cw) * 0.44);
+  top:calc(var(--cw) * 0.02);
+  right:calc(var(--cw) * 0.02);
+  width:calc(var(--cw) * 0.38);
+  height:calc(var(--cw) * 0.38);
   display:flex;align-items:center;justify-content:center;
   border-radius:6px;
   border:1.5px dashed transparent;
   font-family:"Klee One","Hiragino Mincho ProN",serif;
   font-weight:600;
-  font-size:calc(var(--cw) * 0.30);
+  font-size:calc(var(--cw) * 0.28);
   line-height:1;
-  color:var(--blue);
+  color:var(--ink);
   z-index:3;
   transition:border-color .18s, background .18s;
 }
@@ -775,7 +775,9 @@ body{
           if(ki > 0 && cs[ki-1] > 0 && carryMode === "on"){
             var cid = "k" + i + "_" + (ki-1);
             exp[cid] = cs[ki-1];
-            carryCells.push({id:cid, stage:i, idx:ki-1});
+            // くり上がりは、それを足しこむ「積のけた」の右肩に置く
+            // 54×9 なら 4×9=36 の 3 を、積 486 の十の位（8）の右肩に
+            carryCells.push({id:cid, stage:i, host:"c" + prodRow + "_" + (st.col - dw + ki)});
             kinfo[cid] = {kind:"carry", d:Vd[ki], q:st.q, t:Vd[ki]*st.q + cin, val:cs[ki-1]};
             kcells.push(cid);
           }
@@ -897,19 +899,8 @@ body{
     }
 
     // わる数（左側）
-    var vs = String(P.v), divCells = [];
-    for(var a=0; a<P.dw; a++) divCells.push(make(2, 1+a, "given", vs.charAt(a)));
-
-    // くり上がりを書く小さいマス（わる数のけたの右肩）
-    P.carryCells.forEach(function(cc){
-      var box = document.createElement("div");
-      box.className = "carrybox";
-      var sp2 = document.createElement("span");
-      sp2.className = "val"; sp2.textContent = "";
-      box.appendChild(sp2);
-      divCells[cc.idx].appendChild(box);
-      cellEl[cc.id] = box;
-    });
+    var vs = String(P.v);
+    for(var a=0; a<P.dw; a++) make(2, 1+a, "given", vs.charAt(a));
 
     // わられる数（かっこの中）
     for(var j=0; j<P.nw; j++){
@@ -923,6 +914,19 @@ body{
       for(var j2=0; j2<P.nw; j2++){
         make(row+1, P.dw+1+j2, "slot", "", "c"+row+"_"+j2);
       }
+    });
+
+    // くり上がりを書く小さいマス（積のそのけたの右肩）
+    P.carryCells.forEach(function(cc){
+      var hostEl = cellEl[cc.host];
+      if(!hostEl) return;
+      var box = document.createElement("div");
+      box.className = "carrybox";
+      var sp2 = document.createElement("span");
+      sp2.className = "val"; sp2.textContent = "";
+      box.appendChild(sp2);
+      hostEl.appendChild(box);
+      cellEl[cc.id] = box;
     });
 
     // ひき算の線（段ごとに、その段の計算はばだけ）
@@ -976,15 +980,9 @@ body{
       : (isPlace ? "商はどの位に立つ？"
                  : (ketaName(P.stages[step.stage].col, P.nw) + "の計算"));
 
-    var visStage = P.done ? (P.qw - 1) : step.stage;
     for(var id in cellEl){
       var el = cellEl[id];
       var vv = P.filled[id];
-      if(id.charAt(0) === "k" && Number(id.split("_")[0].slice(1)) !== visStage){
-        el.querySelector(".val").textContent = "";
-        el.classList.remove("active","pending");
-        continue;                       // ほかの段のくり上がりは見せない
-      }
       el.querySelector(".val").textContent = (vv == null ? "" : vv);
       el.classList.remove("active","pending","choose");
       if(P.done || !step) continue;
