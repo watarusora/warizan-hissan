@@ -100,32 +100,32 @@ body{
 .setbtn .caret{color:var(--ink-2);font-size:11px}
 .segs{display:flex;gap:6px;margin-bottom:16px}
 
-/* 自分で問題を入れるところ */
-.manual{display:flex;align-items:flex-end;gap:9px;margin-bottom:8px}
-.manual .fld{display:flex;flex-direction:column;gap:4px;flex:1}
-.manual .fld span{font-size:11.5px;color:var(--ink-2)}
-.manual input{
-  width:100%;
-  padding:8px 6px;
-  border-radius:9px;
-  border:1.5px solid var(--line);
-  background:var(--paper);
-  color:var(--ink);
-  font-family:"Klee One","Hiragino Mincho ProN",serif;
-  font-size:22px;font-weight:600;
-  text-align:center;
-  font-variant-numeric:tabular-nums;
+/* 出題のしかたの切りかえ（筆算の画面の上） */
+.srcbar{display:flex;gap:6px}
+
+/* 自分で入れるモード：筆算にそのまま うちこむ */
+.cap{
+  display:flex;align-items:flex-end;justify-content:center;
+  padding-bottom:5px;
+  font-family:"Zen Maru Gothic","Hiragino Maru Gothic ProN",sans-serif;
+  font-size:clamp(10px,2.8vw,13px);
+  font-weight:500;
+  color:var(--ink-2);
+  white-space:nowrap;
+  letter-spacing:.02em;
+  transition:color .18s;
 }
-.manual input:focus{outline:2px solid var(--blue);outline-offset:1px}
-.manual .op{font-size:19px;color:var(--ink-2);padding-bottom:9px}
-.manerr{font-size:12.5px;color:var(--red);min-height:17px;margin:0 0 9px;line-height:1.4}
-.gobtn{
-  width:100%;padding:11px 0;border-radius:10px;border:none;
-  background:var(--ink);color:var(--paper);
-  font-family:inherit;font-size:14px;font-weight:700;
-  cursor:pointer;margin-bottom:16px;
+.cap.on{color:var(--blue);font-weight:700}
+/* わる数がわは 右づめなので、マスごとではなく まとめてかこむ */
+.entzone{
+  margin:4px;
+  border-radius:10px;
+  border:2.5px solid var(--blue);
+  background:var(--blue-soft);
+  pointer-events:none;
+  animation:pulse 1.5s ease-in-out infinite;
 }
-.gobtn:focus-visible{outline:2.5px solid var(--blue);outline-offset:2px}
+.linkbtn.center{align-self:center;text-align:center}
 .mode{
   flex:1;
   padding:7px 4px;
@@ -360,6 +360,8 @@ body{
   background:transparent;
 }
 .key.util:active{background:var(--panel)}
+.key.util.sw{font-size:clamp(11px,2.7vw,13.5px);letter-spacing:-.03em}
+.key.util.del{color:var(--red);font-weight:700}
 
 .next{
   width:100%;
@@ -515,6 +517,11 @@ body{
 
   <div class="body">
     <div class="colA">
+      <div class="srcbar" id="srcBar">
+        <button class="mode" type="button" data-src="auto" aria-pressed="true">じどう</button>
+        <button class="mode" type="button" data-src="manual" aria-pressed="false">自分で入れる</button>
+      </div>
+
       <button class="setbtn" id="setBtn" type="button" aria-haspopup="dialog">
         <span id="setLabel">商2けた・あまりなし</span>
         <span class="caret" aria-hidden="true">▼</span>
@@ -538,7 +545,9 @@ body{
 
     <div class="colB">
       <div class="pad" id="pad"></div>
+      <button class="next hidden" id="goBtn">計算開始！</button>
       <button class="next hidden" id="nextBtn">つぎのもんだい</button>
+      <button class="linkbtn center hidden" id="newBtn">べつの問題を入れる</button>
       <div class="count" id="count"></div>
     </div>
   </div>
@@ -593,6 +602,7 @@ body{
   /* ---------- せってい ---------- */
   var divMode="d1", kindMode="two", nwMode="n2", remMode="none", carryMode="on";
   var srcMode="auto", manN=552, manV=46;
+  var phase = "solve";                   // solve=といている / entry=もんだいを入れている
   function has(list,id){ return list.some(function(x){ return x.id===id; }); }
   // 自分で入れた数が つかえるかどうか（つかえるなら "" を返す）
   function manCheck(n, v){
@@ -709,7 +719,10 @@ body{
     return c;
   }
   function setLabel(){
-    if(srcMode === "manual") return "じぶんで： " + manN + " ÷ " + manV;
+    if(srcMode === "manual"){
+      return (phase === "entry") ? "じぶんで もんだいを つくる"
+                                 : ("じぶんで： " + manN + " ÷ " + manV);
+    }
     var rl = {none:"あまりなし", some:"あまりあり", mix:"あまりまぜる"}[remMode];
     if(divMode === "d1"){
       if(kindMode==="mix" && remMode==="mix") return "ぜんぶまぜる";
@@ -1013,6 +1026,7 @@ body{
   var cellEl = {}, ruleEls = [], noteEl = null;
 
   function buildBoard(){
+    if(phase === "entry"){ buildEntryBoard(); return; }
     hissan.innerHTML = "";
     cellEl = {}; ruleEls = [];
 
@@ -1117,8 +1131,12 @@ body{
   var padEl   = document.getElementById("pad");
   var nextBtn = document.getElementById("nextBtn");
   var maruEl  = document.getElementById("maru");
+  var goBtn   = document.getElementById("goBtn");
+  var newBtn  = document.getElementById("newBtn");
+  var srcBar  = document.getElementById("srcBar");
 
   function render(keepSub){
+    if(phase === "entry"){ renderEntry(keepSub); return; }
     var step    = P.done ? null : P.steps[P.si];
     var isPlace = !!(step && step.place);
     var act     = P.done ? null : (isPlace ? P.sel : step.cells[P.ci]);
@@ -1175,7 +1193,7 @@ body{
       if(ce) ce.classList.toggle("used", P.filled[cc.host] != null);
     });
 
-    noteEl.classList.toggle("hidden", !(P.done && P.r > 0));
+    if(noteEl) noteEl.classList.toggle("hidden", !(P.done && P.r > 0));
 
     if(P.done){
       guideEl.textContent = P.mistakes === 0 ? "せいかい！ ノーミス！" : "せいかい！";
@@ -1188,9 +1206,13 @@ body{
       if(!keepSub){ subEl.className = "sub"; subEl.textContent = ""; }
     }
 
+    syncSrcBar();
+    goBtn.classList.add("hidden");
     padEl.classList.toggle("hidden", P.done);
     nextBtn.classList.toggle("hidden", !P.done);
     nextBtn.textContent = (srcMode === "manual") ? "もういちど" : "つぎのもんだい";
+    // 「べつの問題を入れる」は 解きおわってから出す（といている間の高さを ふやさない）
+    newBtn.classList.toggle("hidden", !(srcMode === "manual" && P.done));
     countEl.textContent = "といた数 " + rec.solved + "　花丸 " + rec.perfect
                         + "　連続 " + rec.streak;
   }
@@ -1396,7 +1418,6 @@ body{
 
   setBtn.addEventListener("click", function(){
     var html = '<h2>もんだいの種類</h2>'
-      + '<h3>出題のしかた</h3>' + segHTML("segSrc", SRCS, srcMode)
       + '<div id="axisArea"></div>'
       + '<div id="carryAxis"></div>'
       + '<p class="empty" id="poolInfo"></p>'
@@ -1422,8 +1443,6 @@ body{
       }
 
       function refresh(){
-        press("segSrc", srcMode);
-
         if(srcMode === "auto"){
           axisArea.innerHTML =
               '<h3>わる数のけた数</h3>' + segHTML("segDiv", DIVS, divMode)
@@ -1437,30 +1456,7 @@ body{
           else                 bind("segNw",   function(id){ nwMode = id; });
         }else{
           axisArea.innerHTML =
-              '<div class="manual">'
-            +   '<label class="fld"><span>わられる数</span>'
-            +     '<input id="manNin" type="text" inputmode="numeric" maxlength="4" value="' + manN + '"></label>'
-            +   '<div class="op">÷</div>'
-            +   '<label class="fld"><span>わる数</span>'
-            +     '<input id="manVin" type="text" inputmode="numeric" maxlength="2" value="' + manV + '"></label>'
-            + '</div>'
-            + '<p class="manerr" id="manErr"></p>'
-            + '<button class="gobtn" type="button" id="manGo">この問題を出す</button>';
-
-          var nIn = sheet.querySelector("#manNin");
-          var vIn = sheet.querySelector("#manVin");
-          var eOut = sheet.querySelector("#manErr");
-          function go(){
-            var msg = manCheck(nIn.value, vIn.value);
-            if(msg){ eOut.textContent = msg; return; }
-            manN = Number(nIn.value); manV = Number(vIn.value);
-            saveSet(); nextProblem(); close();
-          }
-          sheet.querySelector("#manGo").addEventListener("click", go);
-          [nIn, vIn].forEach(function(el){
-            el.addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); go(); } });
-            el.addEventListener("input", function(){ eOut.textContent = manCheck(nIn.value, vIn.value); });
-          });
+            '<p class="empty">「自分で入れる」は、筆算の画面で すうじを うちこんで つくります。</p>';
         }
 
         // くり上がり・くり下がりの書きこみは わる数が2けたのときだけ意味がある
@@ -1471,7 +1467,7 @@ body{
         if(dwNow === 2) bind("segCar", function(id){ carryMode = id; });
 
         info.textContent = (srcMode === "manual")
-          ? ("いまの問題は " + manN + " ÷ " + manV + "。「もういちど」で同じ問題をくり返します。"
+          ? ("いまの問題は " + manN + " ÷ " + manV + "。「べつの問題を入れる」で 作りなおせます。"
              + "わられる数は 10〜9999、わる数は 2〜99 まで。")
           : ("いま出るのは " + poolCount().toLocaleString() + " 通り。"
              + (divMode === "d2"
@@ -1480,7 +1476,6 @@ body{
                                : "商は必ず十の位から立つので、書く位置はアプリが決めます。")));
       }
 
-      bind("segSrc", function(id){ srcMode = id; });
       refresh();
     }, setBtn);
   });
@@ -1535,8 +1530,225 @@ body{
     r.addEventListener("click", retry); padEl.appendChild(r);
   }
 
+  /* ---------- 自分で入れる：筆算にそのまま うちこむ ---------- */
+  var ENT_NW = 4, ENT_DW = 2;                  // 入れられる けた数
+  var ent = {n:"", v:"", fld:"n"};             // fld: n=わられる数 / v=わる数
+  var entSwEl = null;
+
+  function buildEntryBoard(){
+    hissan.innerHTML = "";
+    cellEl = {}; ruleEls = []; noteEl = null;
+
+    var cols = ENT_DW + ENT_NW;
+    hissan.style.setProperty("--cols", cols);
+    hissan.style.setProperty("--rows", 1);
+    hissan.style.gridTemplateColumns = "repeat(" + cols + ", var(--cw))";
+    hissan.style.gridTemplateRows    = "auto var(--ch)";
+
+    function cap(id, text, c1, c2){
+      var d = document.createElement("div");
+      d.className = "cap";
+      d.style.gridRow = 1;
+      d.style.gridColumn = c1 + " / " + c2;
+      d.textContent = text;
+      hissan.appendChild(d);
+      cellEl[id] = d;
+    }
+    cap("capV", "わる数",     1, 1 + ENT_DW);
+    cap("capN", "わられる数", 1 + ENT_DW, 1 + ENT_DW + ENT_NW);
+
+    function box(id, col, cls, fld){
+      var d = document.createElement("div");
+      d.className = "cell slot " + cls;
+      d.style.gridRow = 2;
+      d.style.gridColumn = col;
+      var sp = document.createElement("span");
+      sp.className = "val";
+      d.appendChild(sp);
+      d.setAttribute("role", "button");
+      d.addEventListener("click", function(){ entFocus(fld); });
+      hissan.appendChild(d);
+      cellEl[id] = d;
+    }
+    for(var a=0; a<ENT_DW; a++) box("ev"+a, 1+a, "", "v");
+    for(var j=0; j<ENT_NW; j++) box("en"+j, 1+ENT_DW+j, (j===0 ? "dvd-l" : "dvd-r"), "n");
+
+    var zone = document.createElement("div");
+    zone.className = "entzone hidden";
+    zone.style.gridRow = 2;
+    zone.style.gridColumn = "1 / " + (1 + ENT_DW);
+    hissan.appendChild(zone);
+    cellEl["ezone"] = zone;
+  }
+
+  function renderEntry(keepSub){
+    setLbl.textContent = setLabel();
+    syncSrcBar();
+
+    chipsEl.innerHTML = "";
+    STEPNAMES.forEach(function(name){
+      var c = document.createElement("div");
+      c.className = "chip";
+      c.textContent = name;
+      chipsEl.appendChild(c);
+    });
+    whereEl.textContent = "じぶんで もんだいを つくろう";
+
+    // わる数は 右づめ（1けたでも かっこのとなりに来るように）
+    var off = ENT_DW - ent.v.length;
+    for(var a=0; a<ENT_DW; a++){
+      var ev = cellEl["ev"+a];
+      var vch = (a >= off) ? ent.v.charAt(a - off) : "";
+      ev.querySelector(".val").textContent = vch;
+      ev.classList.remove("active","pending");
+      if(!vch && ent.fld !== "v") ev.classList.add("pending");
+    }
+    cellEl["ezone"].classList.toggle("hidden", ent.fld !== "v");
+
+    // わられる数は 左づめ。つぎに入るマスだけ 光らせる
+    for(var j=0; j<ENT_NW; j++){
+      var en = cellEl["en"+j];
+      var ch = ent.n.charAt(j);
+      en.querySelector(".val").textContent = ch;
+      en.classList.remove("active","pending");
+      if(!ch) en.classList.add((ent.fld === "n" && j === ent.n.length) ? "active" : "pending");
+    }
+
+    cellEl["capV"].classList.toggle("on", ent.fld === "v");
+    cellEl["capN"].classList.toggle("on", ent.fld === "n");
+    if(entSwEl) entSwEl.textContent = (ent.fld === "n") ? "→わる数" : "→わられる数";
+
+    guideEl.textContent = (ent.fld === "n") ? "つくる：わられる数を 入れよう"
+                                            : "つくる：わる数を 入れよう";
+    if(!keepSub){
+      subEl.className = "sub";
+      subEl.textContent = (ent.n && ent.v)
+        ? ("この問題は " + Number(ent.n) + " ÷ " + Number(ent.v) + "。「計算開始！」をおしてね")
+        : "入れるところは、マスをタップしても かえられるよ";
+    }
+
+    padEl.classList.remove("hidden");
+    goBtn.classList.remove("hidden");
+    nextBtn.classList.add("hidden");
+    newBtn.classList.add("hidden");
+    maruEl.classList.add("hidden");
+    countEl.textContent = "といた数 " + rec.solved + "　花丸 " + rec.perfect
+                        + "　連続 " + rec.streak;
+  }
+
+  function entFocus(f){
+    if(phase !== "entry" || ent.fld === f) return;
+    ent.fld = f;
+    render();
+  }
+  function entPress(d){
+    if(phase !== "entry") return;
+    var fld = ent.fld, max = (fld === "n") ? ENT_NW : ENT_DW;
+    if(ent[fld].length === 0 && d === 0){
+      render(); say("warn", "0 から はじまる数は 入れられないよ");
+      return;
+    }
+    if(ent[fld].length >= max){
+      render();
+      say("warn", (fld === "n" ? "わられる数は " + ENT_NW : "わる数は " + ENT_DW)
+                + "けたまでだよ。なおすときは「けす」をおしてね");
+      return;
+    }
+    ent[fld] += d;
+    // わられる数が いっぱいになったら わる数へ うつる（だまって うつらないよう 声をかける）
+    var moved = false;
+    if(fld === "n" && ent.n.length >= ENT_NW && ent.v.length < ENT_DW){ ent.fld = "v"; moved = true; }
+    render();
+    if(moved) say("hint", "わられる数は " + ENT_NW + "けたまで。つぎは わる数を 入れてね");
+  }
+  function entDel(){
+    if(phase !== "entry") return;
+    var fld = ent.fld;
+    if(!ent[fld].length){
+      if(fld === "v" && ent.n.length){ ent.fld = "n"; render(); return; }
+      render(); say("warn", "けす すうじが ないよ");
+      return;
+    }
+    ent[fld] = ent[fld].slice(0, -1);
+    render();
+  }
+  function entGo(){
+    if(phase !== "entry") return;
+    var msg = (!ent.n || !ent.v) ? "わられる数と わる数を りょうほう 入れてね"
+                                 : manCheck(ent.n, ent.v);
+    if(msg){ render(); say("warn", msg); return; }
+    manN = Number(ent.n); manV = Number(ent.v);
+    saveSet();
+    phase = "solve";
+    buildPad();
+    nextProblem();
+  }
+  function startEntry(){
+    phase = "entry";
+    srcMode = "manual"; saveSet();
+    ent = {n:"", v:"", fld:"n"};
+    maruEl.classList.add("hidden");
+    buildEntryPad();
+    buildEntryBoard();
+    render();
+  }
+  function buildEntryPad(){
+    padEl.innerHTML = "";
+    [1,2,3,4,5,6,7,8,9].forEach(function(d){
+      var b = document.createElement("button");
+      b.className = "key"; b.type = "button"; b.textContent = d;
+      b.addEventListener("click", function(){ entPress(d); });
+      padEl.appendChild(b);
+    });
+    var del = document.createElement("button");
+    del.className = "key util del"; del.type = "button"; del.textContent = "けす";
+    del.addEventListener("click", entDel);
+    padEl.appendChild(del);
+    var z = document.createElement("button");
+    z.className = "key"; z.type = "button"; z.textContent = "0";
+    z.addEventListener("click", function(){ entPress(0); });
+    padEl.appendChild(z);
+    entSwEl = document.createElement("button");
+    entSwEl.className = "key util sw"; entSwEl.type = "button";
+    entSwEl.textContent = (ent.fld === "n") ? "→わる数" : "→わられる数";
+    entSwEl.addEventListener("click", function(){ entFocus(ent.fld === "n" ? "v" : "n"); });
+    padEl.appendChild(entSwEl);
+  }
+
+  /* ---------- 出題のしかたの切りかえ ---------- */
+  function syncSrcBar(){
+    var bs = srcBar.querySelectorAll(".mode");
+    for(var i=0;i<bs.length;i++){
+      bs[i].setAttribute("aria-pressed", String(bs[i].getAttribute("data-src") === srcMode));
+    }
+  }
+  srcBar.addEventListener("click", function(e){
+    var b = e.target.closest ? e.target.closest("[data-src]") : null;
+    if(!b) return;
+    var id = b.getAttribute("data-src");
+    if(id === "auto"){
+      if(srcMode === "auto" && phase === "solve") return;
+      srcMode = "auto"; saveSet();
+      if(phase === "entry"){ phase = "solve"; buildPad(); }
+      nextProblem();
+    }else{
+      startEntry();
+    }
+  });
+  goBtn.addEventListener("click", entGo);
+  newBtn.addEventListener("click", startEntry);
+
   document.addEventListener("keydown", function(e){
     if(document.querySelector(".sheet")) return;
+    if(phase === "entry"){
+      if(e.key >= "0" && e.key <= "9"){ entPress(parseInt(e.key,10)); }
+      else if(e.key === "Backspace" || e.key === "Delete"){ entDel(); e.preventDefault(); }
+      else if(e.key === "Enter"){ entGo(); }
+      else if(e.key === "Tab"){ entFocus(ent.fld === "n" ? "v" : "n"); e.preventDefault(); }
+      else if(e.key === "ArrowLeft"){  entFocus("v"); e.preventDefault(); }
+      else if(e.key === "ArrowRight"){ entFocus("n"); e.preventDefault(); }
+      return;
+    }
     if(e.key >= "0" && e.key <= "9"){ press(parseInt(e.key,10)); }
     else if(e.key === "Enter" && P.done){ nextProblem(); }
     else if(!P.done && P.steps[P.si].place){
