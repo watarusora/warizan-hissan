@@ -238,6 +238,12 @@ body{
   background:var(--blue-soft);
   animation:pulse 1.5s ease-in-out infinite;
 }
+/* 貸して減った数を書いたら、もとの数に消し線 */
+.cell.struck > .val{
+  text-decoration:line-through;
+  text-decoration-thickness:2px;
+  opacity:.45;
+}
 .carrybox.wrong{animation:shake .34s}
 .carrybox.wrong .val{color:var(--red)}
 .carrybox.just .val{animation:pop .3s}
@@ -721,7 +727,7 @@ body{
       return ids;
     }
 
-    var steps = [], prevDiffStart = 0, carryCells = [];
+    var steps = [], prevDiffStart = 0, carryCells = [], borrowCells = [];
     stages.forEach(function(st, i){
       var prodRow = 2 + 2*i, diffRow = 3 + 2*i;
       var qid = "c0_" + st.col;
@@ -826,16 +832,48 @@ body{
           return st.q + " × " + v + " は？";
         }});
 
-      steps.push({k:"ひく", stage:i, cells:diffIds.slice().reverse(), last:(i === qw-1),
-        into:st.into, prod:st.prod, sub:sub,
+      // ひく：一の位から。くり下がりを書きこませる
+      var diffStart = st.col - String(st.diff).length + 1;
+      var topId = function(col){ return (i === 0) ? ("d_"+col) : ("c"+(1+2*i)+"_"+col); };
+      var hcells = [], hwant = [], hinfo = [];
+      var hadd = function(cell, want, info){ hcells.push(cell); hwant.push(want); hinfo.push(info); };
+      for(var j3 = st.col; j3 >= aStart; j3--){
+        var inf = sub[j3];
+        var effFull = inf.aEff + (inf.needBorrow ? 10 : 0);
+        if(carryMode === "on" && dw >= 2){
+          // 上から1くりさげたら、左肩に 1（これで 1X と読む）
+          if(effFull >= 10){
+            var lid = "b" + i + "_l" + j3;
+            exp[lid] = 1;
+            borrowCells.push({id:lid, side:"l", host:topId(j3), strike:false});
+            hadd(lid, 1, {kind:"lend10", a:inf.a, b:inf.b, eff:effFull});
+          }
+          // 下に1かして減ったら、右肩に 新しい数（もとの数は消し線）
+          if((effFull % 10) !== inf.a){
+            var rid = "b" + i + "_r" + j3;
+            exp[rid] = effFull % 10;
+            borrowCells.push({id:rid, side:"r", host:topId(j3), strike:true});
+            hadd(rid, effFull % 10, {kind:"down", a:inf.a, eff:effFull});
+          }
+        }
+        if(j3 >= diffStart){
+          var did = "c" + diffRow + "_" + j3;
+          hadd(did, exp[did], {kind:"sub", info:inf, eff:effFull});
+        }
+      }
+      steps.push({k:"ひく", stage:i, cells:hcells, want:hwant, hinfo:hinfo,
+        last:(i === qw-1), into:st.into, prod:st.prod, sub:sub,
         guide: (diffIds.length > 1 ? "一の位からじゅんに、上の数からひこう" : "上の数から、かけた数をひこう")
                + ((i === qw-1 && st.diff > 0) ? "。のこりがあまり" : ""),
         hint: st.into + " − " + st.prod + " は？"
               + (i === qw-1 ? (st.diff === 0 ? "（0 になるよ）" : "（のこりが あまり）") : ""),
-        hintFor: function(cellId){
-          var info = sub[Number(cellId.split("_")[1])];
-          if(!info) return st.into + " − " + st.prod + " は？";
-          return subWords(info, true);
+        hintFor: function(cellId, idx){
+          var f = hinfo[idx];
+          if(!f) return st.into + " − " + st.prod + " は？";
+          if(f.kind === "lend10") return f.a + " から " + f.b + " はひけないね。上の位から 1 くりさげて、左肩に 1 を書こう";
+          if(f.kind === "down")   return "下の位に 1 かしたから、" + f.a + " は " + (f.eff % 10)
+                                       + "。右肩に " + (f.eff % 10) + " を書いて、もとの " + f.a + " は消そう";
+          return subWords(f.info, true);
         }});
 
       if(st.bring !== null){
@@ -860,7 +898,8 @@ body{
     }
 
     return {n:n, v:v, q:qv, r:rv, D:D, nw:nw, dw:dw, qw:qw, rows:R, s:s,
-            stages:stages, exp:exp, steps:steps, placeCells:placeCells, carryCells:carryCells,
+            stages:stages, exp:exp, steps:steps, placeCells:placeCells,
+            carryCells:carryCells, borrowCells:borrowCells,
             filled:{}, si:0, ci:0, sel:null, mistakes:0, done:false, doneStages:0};
   }
 
@@ -939,7 +978,7 @@ body{
 
     // わられる数（かっこの中）
     for(var j=0; j<P.nw; j++){
-      make(2, P.dw+1+j, "given " + (j===0 ? "dvd-l" : "dvd-r"), P.D[j]);
+      make(2, P.dw+1+j, "given " + (j===0 ? "dvd-l" : "dvd-r"), P.D[j], "d_"+j);
     }
 
     // 書きこむマス
@@ -962,6 +1001,19 @@ body{
       box.appendChild(sp2);
       hostEl.appendChild(box);
       cellEl[cc.id] = box;
+    });
+
+    // くり下がりを書く小さいマス
+    P.borrowCells.forEach(function(bc){
+      var hostEl = cellEl[bc.host];
+      if(!hostEl) return;
+      var box = document.createElement("div");
+      box.className = "carrybox" + (bc.side === "l" ? " left" : "");
+      var sp3 = document.createElement("span");
+      sp3.className = "val"; sp3.textContent = "";
+      box.appendChild(sp3);
+      hostEl.appendChild(box);
+      cellEl[bc.id] = box;
     });
 
     // ひき算の線（段ごとに、その段の計算はばだけ）
@@ -1016,6 +1068,7 @@ body{
                  : (ketaName(P.stages[step.stage].col, P.nw) + "の計算"));
 
     for(var id in cellEl){
+      if(id.charAt(0) === "d") continue;        // わられる数のマスは そのまま
       var el = cellEl[id];
       var vv = P.filled[id];
       el.querySelector(".val").textContent = (vv == null ? "" : vv);
@@ -1034,6 +1087,13 @@ body{
     // ひき算の線は、その段のかけ算が終わったら出す
     ruleEls.forEach(function(el, i){
       el.classList.toggle("show", P.doneStages > i || P.done);
+    });
+
+    // 右肩に新しい数を書いたら、もとの数を消す
+    P.borrowCells.forEach(function(bc){
+      if(!bc.strike) return;
+      var h = cellEl[bc.host];
+      if(h) h.classList.toggle("struck", P.filled[bc.id] != null);
     });
 
     noteEl.classList.toggle("hidden", !(P.done && P.r > 0));
@@ -1107,6 +1167,11 @@ body{
         if(kf.kind === "sum")  return "左肩の " + kf.a + " と 右肩の " + kf.b + " をたすと "
                                     + kf.sum + "。このマスは その一の位だよ";
       }
+    }
+    if(step.k === "ひく" && step.hinfo){
+      var hf = step.hinfo[P.ci];
+      if(hf && hf.kind === "lend10") return "上から 1 くりさげたしるしだよ。左肩には 1 を書くよ";
+      if(hf && hf.kind === "down")   return "下の位に 1 かしたから、" + hf.a + " より 1 小さい数だよ";
     }
     if(step.k === "ひく"){
       var info = step.sub && step.sub[Number(target.split("_")[1])];
@@ -1279,7 +1344,7 @@ body{
 
         // くり上がりの書きこみは わる数2けたのときだけ意味がある
         carryAxis.innerHTML = (divMode === "d2")
-          ? '<h3>くり上がりの書きこみ</h3>' + segHTML("segCar", CARRIES, carryMode)
+          ? '<h3>くり上がり・くり下がりの書きこみ</h3>' + segHTML("segCar", CARRIES, carryMode)
           : "";
         if(divMode === "d2") bind("segCar", function(id){ carryMode = id; });
 
