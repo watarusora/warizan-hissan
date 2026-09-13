@@ -781,9 +781,13 @@ body{
             kcells.push(cid);
           }
           kinfo[rev[m]] = {kind:"digit", d:Vd[ki], q:st.q, carryIn:cin, t:tt2};
+          // いちばん左のけたは、出た数をそのまま左から書く（58 なら 5 → 8）
+          if(ki === 0 && lead > 0){
+            kinfo[rev[dw]] = {kind:"digit", d:Vd[0], q:st.q, carryIn:cin, t:tt2, top:true};
+            kcells.push(rev[dw]);
+          }
           kcells.push(rev[m]);
         }
-        if(lead > 0) kcells.push(rev[dw]);
       }
       steps.push({k:"かける", stage:i, cells:kcells, kinfo:kinfo,
         guide:"たてた商と、わる数をかけよう" + (dw >= 2 ? "。一の位から" : ""),
@@ -794,6 +798,12 @@ body{
           if(f.kind === "carry"){
             return f.d + " × " + f.q + " = " + f.t + "。くり上がりの " + f.val
                  + " を 先に右肩へ小さく書こう";
+          }
+          if(f.top){
+            return (f.carryIn
+                     ? (f.d + " × " + f.q + " に くり上がりの " + f.carryIn + " をたして " + f.t)
+                     : (f.d + " × " + f.q + " = " + f.t))
+                 + "。左から書くので、まず " + Math.floor(f.t/10) + " だよ";
           }
           return f.carryIn
             ? (f.d + " × " + f.q + " に くり上がりの " + f.carryIn + " をたして " + f.t + "。その一の位を書くよ")
