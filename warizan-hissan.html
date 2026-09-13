@@ -1031,7 +1031,8 @@ body{
       var el = document.createElement("div");
       el.className = "rule";
       el.style.gridRow = 3 + 2*i;
-      el.style.gridColumn = (P.dw+1) + " / " + (P.dw + 2 + st.col);
+      // 線は わられる数の一の位まで のばす（どの段も同じ長さ）
+      el.style.gridColumn = (P.dw+1) + " / " + (P.dw + P.nw + 1);
       hissan.appendChild(el);
       ruleEls.push(el);
     });
