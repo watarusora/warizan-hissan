@@ -99,6 +99,33 @@ body{
 .setbtn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .setbtn .caret{color:var(--ink-2);font-size:11px}
 .segs{display:flex;gap:6px;margin-bottom:16px}
+
+/* 自分で問題を入れるところ */
+.manual{display:flex;align-items:flex-end;gap:9px;margin-bottom:8px}
+.manual .fld{display:flex;flex-direction:column;gap:4px;flex:1}
+.manual .fld span{font-size:11.5px;color:var(--ink-2)}
+.manual input{
+  width:100%;
+  padding:8px 6px;
+  border-radius:9px;
+  border:1.5px solid var(--line);
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Klee One","Hiragino Mincho ProN",serif;
+  font-size:22px;font-weight:600;
+  text-align:center;
+  font-variant-numeric:tabular-nums;
+}
+.manual input:focus{outline:2px solid var(--blue);outline-offset:1px}
+.manual .op{font-size:19px;color:var(--ink-2);padding-bottom:9px}
+.manerr{font-size:12.5px;color:var(--red);min-height:17px;margin:0 0 9px;line-height:1.4}
+.gobtn{
+  width:100%;padding:11px 0;border-radius:10px;border:none;
+  background:var(--ink);color:var(--paper);
+  font-family:inherit;font-size:14px;font-weight:700;
+  cursor:pointer;margin-bottom:16px;
+}
+.gobtn:focus-visible{outline:2.5px solid var(--blue);outline-offset:2px}
 .mode{
   flex:1;
   padding:7px 4px;
@@ -165,7 +192,8 @@ body{
   --chbase:clamp(38px,13vw,58px);
   /* 列が増えても画面からはみ出さないように、幅で頭打ちにする */
   --cw:min(var(--cwbase), calc((100vw - 70px) / var(--cols, 3)));
-  --ch:min(var(--chbase), var(--cw));
+  /* 行が増えても画面からはみ出さないように、高さでも頭打ちにする */
+  --ch:max(22px, min(var(--chbase), var(--cw), calc((100vh - 645px) / var(--rows, 6))));
   display:grid;
 }
 .cell{
@@ -427,6 +455,7 @@ body{
     --cwbase:clamp(30px,9.6vh,80px);
     --chbase:clamp(28px,9.2vh,76px);
     --cw:min(var(--cwbase), calc((min(100vw, 460px) - 40px) / var(--cols, 3)));
+    --ch:max(20px, min(var(--chbase), var(--cw), calc((100vh - 290px) / var(--rows, 6))));
   }
   .cell{font-size:min(clamp(20px,6vh,50px), calc(var(--cw) * 0.66))}
   .note{font-size:clamp(11px,1.6vh,14px)}
@@ -525,6 +554,8 @@ body{
   var NWKEY   = "warizan-hissan-nw";     // わられる数のけた数（わる数2けたのとき）
   var REMKEY  = "warizan-hissan-rem";    // あまり
   var CARKEY  = "warizan-hissan-carry";  // くり上がりを書くか
+  var SRCKEY  = "warizan-hissan-src";    // じどう出題か 自分で入れるか
+  var MANKEY  = "warizan-hissan-man";    // 自分で入れた数
 
   var STEPNAMES = ["たてる","かける","ひく","おろす"];
   var ERRKEYS   = ["たてる","かける","ひく","おろす","立てる位","0を立てる"];
@@ -537,6 +568,7 @@ body{
                {id:"n3",label:"3けた"},{id:"mix",label:"まぜる"}];
   var REMS  = [{id:"none",label:"あまりなし"},{id:"some",label:"あまりあり"},{id:"mix",label:"まぜる"}];
   var CARRIES = [{id:"on",label:"書く"},{id:"off",label:"書かない"}];
+  var SRCS    = [{id:"auto",label:"じどう"},{id:"manual",label:"自分で入れる"}];
 
   /* ---------- きろく ---------- */
   function blank(){
@@ -560,7 +592,19 @@ body{
 
   /* ---------- せってい ---------- */
   var divMode="d1", kindMode="two", nwMode="n2", remMode="none", carryMode="on";
+  var srcMode="auto", manN=552, manV=46;
   function has(list,id){ return list.some(function(x){ return x.id===id; }); }
+  // 自分で入れた数が つかえるかどうか（つかえるなら "" を返す）
+  function manCheck(n, v){
+    if(!/^[0-9]+$/.test(String(n)) || !/^[0-9]+$/.test(String(v))) return "数字だけを入れてね";
+    n = Number(n); v = Number(v);
+    if(v < 2)    return "わる数は 2 いじょうにしてね";
+    if(v > 99)   return "わる数は 99 までにしてね";
+    if(n < 10)   return "わられる数は 10 いじょうにしてね";
+    if(n > 9999) return "わられる数は 9999 までにしてね";
+    if(n < v)    return "わられる数が わる数より小さいと 商が立たないよ";
+    return "";
+  }
   (function load(){
     try{
       var a=localStorage.getItem(DIVKEY);  if(a && has(DIVS,a))  divMode=a;
@@ -568,6 +612,9 @@ body{
       var c=localStorage.getItem(NWKEY);   if(c && has(NWS,c))   nwMode=c;
       var d=localStorage.getItem(REMKEY);  if(d && has(REMS,d))  remMode=d;
       var e2=localStorage.getItem(CARKEY); if(e2 && has(CARRIES,e2)) carryMode=e2;
+      var f2=localStorage.getItem(SRCKEY); if(f2 && has(SRCS,f2)) srcMode=f2;
+      var g2=localStorage.getItem(MANKEY);
+      if(g2){ var mm=JSON.parse(g2); if(mm && !manCheck(mm.n, mm.v)){ manN=mm.n; manV=mm.v; } }
     }catch(e){}
   })();
   function saveSet(){
@@ -577,6 +624,8 @@ body{
       localStorage.setItem(NWKEY,nwMode);
       localStorage.setItem(REMKEY,remMode);
       localStorage.setItem(CARKEY,carryMode);
+      localStorage.setItem(SRCKEY,srcMode);
+      localStorage.setItem(MANKEY,JSON.stringify({n:manN, v:manV}));
     }catch(e){}
   }
 
@@ -660,6 +709,7 @@ body{
     return c;
   }
   function setLabel(){
+    if(srcMode === "manual") return "じぶんで： " + manN + " ÷ " + manV;
     var rl = {none:"あまりなし", some:"あまりあり", mix:"あまりまぜる"}[remMode];
     if(divMode === "d1"){
       if(kindMode==="mix" && remMode==="mix") return "ぜんぶまぜる";
@@ -926,6 +976,7 @@ body{
   }
 
   function makeProblem(){
+    if(srcMode === "manual") return buildProblem(manN, manV, true);
     var rem = pickCat(remMode, ["none","some"], lastRem);
     lastRem = rem;
     var n, v, t = 0;
@@ -959,6 +1010,7 @@ body{
 
     var cols = P.dw + P.nw;
     hissan.style.setProperty("--cols", cols);
+    hissan.style.setProperty("--rows", P.rows);
     hissan.style.gridTemplateColumns = "repeat(" + cols + ", var(--cw))";
     hissan.style.gridTemplateRows    = "repeat(" + P.rows + ", var(--ch))";
 
@@ -1130,6 +1182,7 @@ body{
 
     padEl.classList.toggle("hidden", P.done);
     nextBtn.classList.toggle("hidden", !P.done);
+    nextBtn.textContent = (srcMode === "manual") ? "もういちど" : "つぎのもんだい";
     countEl.textContent = "といた数 " + rec.solved + "　花丸 " + rec.perfect
                         + "　連続 " + rec.streak;
   }
@@ -1333,16 +1386,15 @@ body{
 
   setBtn.addEventListener("click", function(){
     var html = '<h2>もんだいの種類</h2>'
-      + '<h3>わる数のけた数</h3>' + segHTML("segDiv", DIVS, divMode)
-      + '<div id="subAxis"></div>'
-      + '<h3>あまり</h3>' + segHTML("segRem", REMS, remMode)
+      + '<h3>出題のしかた</h3>' + segHTML("segSrc", SRCS, srcMode)
+      + '<div id="axisArea"></div>'
       + '<div id="carryAxis"></div>'
       + '<p class="empty" id="poolInfo"></p>'
       + '<div class="sheet-actions"><button class="sheet-close" id="closeSheet">とじる</button></div>';
 
-    openSheet(html, "もんだいの種類", function(sheet){
-      var info = sheet.querySelector("#poolInfo");
-      var subAxis = sheet.querySelector("#subAxis");
+    openSheet(html, "もんだいの種類", function(sheet, close){
+      var info      = sheet.querySelector("#poolInfo");
+      var axisArea  = sheet.querySelector("#axisArea");
       var carryAxis = sheet.querySelector("#carryAxis");
 
       function bind(gid, onPick){
@@ -1353,35 +1405,72 @@ body{
           });
         });
       }
-      function refresh(){
-        // まん中の軸は、わる数のけた数で意味が変わる
-        subAxis.innerHTML = (divMode === "d1")
-          ? '<h3>商の形</h3>' + segHTML("segKind", KINDS, kindMode)
-          : '<h3>もんだいの形</h3>' + segHTML("segNw", NWS, nwMode);
-        if(divMode === "d1") bind("segKind", function(id){ kindMode = id; });
-        else                 bind("segNw",   function(id){ nwMode = id; });
+      function press(gid, cur){
+        sheet.querySelectorAll("#"+gid+" .mode").forEach(function(b){
+          b.setAttribute("aria-pressed", String(b.getAttribute("data-id") === cur));
+        });
+      }
 
-        // くり上がりの書きこみは わる数2けたのときだけ意味がある
-        carryAxis.innerHTML = (divMode === "d2")
+      function refresh(){
+        press("segSrc", srcMode);
+
+        if(srcMode === "auto"){
+          axisArea.innerHTML =
+              '<h3>わる数のけた数</h3>' + segHTML("segDiv", DIVS, divMode)
+            + ((divMode === "d1")
+                ? '<h3>商の形</h3>' + segHTML("segKind", KINDS, kindMode)
+                : '<h3>もんだいの形</h3>' + segHTML("segNw", NWS, nwMode))
+            + '<h3>あまり</h3>' + segHTML("segRem", REMS, remMode);
+          bind("segDiv", function(id){ divMode = id; });
+          bind("segRem", function(id){ remMode = id; });
+          if(divMode === "d1") bind("segKind", function(id){ kindMode = id; });
+          else                 bind("segNw",   function(id){ nwMode = id; });
+        }else{
+          axisArea.innerHTML =
+              '<div class="manual">'
+            +   '<label class="fld"><span>わられる数</span>'
+            +     '<input id="manNin" type="text" inputmode="numeric" maxlength="4" value="' + manN + '"></label>'
+            +   '<div class="op">÷</div>'
+            +   '<label class="fld"><span>わる数</span>'
+            +     '<input id="manVin" type="text" inputmode="numeric" maxlength="2" value="' + manV + '"></label>'
+            + '</div>'
+            + '<p class="manerr" id="manErr"></p>'
+            + '<button class="gobtn" type="button" id="manGo">この問題を出す</button>';
+
+          var nIn = sheet.querySelector("#manNin");
+          var vIn = sheet.querySelector("#manVin");
+          var eOut = sheet.querySelector("#manErr");
+          function go(){
+            var msg = manCheck(nIn.value, vIn.value);
+            if(msg){ eOut.textContent = msg; return; }
+            manN = Number(nIn.value); manV = Number(vIn.value);
+            saveSet(); nextProblem(); close();
+          }
+          sheet.querySelector("#manGo").addEventListener("click", go);
+          [nIn, vIn].forEach(function(el){
+            el.addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); go(); } });
+            el.addEventListener("input", function(){ eOut.textContent = manCheck(nIn.value, vIn.value); });
+          });
+        }
+
+        // くり上がり・くり下がりの書きこみは わる数が2けたのときだけ意味がある
+        var dwNow = (srcMode === "manual") ? String(manV).length : (divMode === "d2" ? 2 : 1);
+        carryAxis.innerHTML = (dwNow === 2)
           ? '<h3>くり上がり・くり下がりの書きこみ</h3>' + segHTML("segCar", CARRIES, carryMode)
           : "";
-        if(divMode === "d2") bind("segCar", function(id){ carryMode = id; });
+        if(dwNow === 2) bind("segCar", function(id){ carryMode = id; });
 
-        ["segDiv","segRem"].forEach(function(gid){
-          var cur = (gid==="segDiv") ? divMode : remMode;
-          sheet.querySelectorAll("#"+gid+" .mode").forEach(function(b){
-            b.setAttribute("aria-pressed", String(b.getAttribute("data-id") === cur));
-          });
-        });
-
-        info.textContent = "いま出るのは " + poolCount().toLocaleString() + " 通り。"
-          + (divMode === "d2"
-              ? "わる数を何十とみて見当をつけ、合わなければ1つずつ直します。"
-              : (askPlace() ? "商を立てる位は、子どもがえらびます。"
-                            : "商は必ず十の位から立つので、書く位置はアプリが決めます。"));
+        info.textContent = (srcMode === "manual")
+          ? ("いまの問題は " + manN + " ÷ " + manV + "。「もういちど」で同じ問題をくり返します。"
+             + "わられる数は 10〜9999、わる数は 2〜99 まで。")
+          : ("いま出るのは " + poolCount().toLocaleString() + " 通り。"
+             + (divMode === "d2"
+                 ? "わる数を何十とみて見当をつけ、合わなければ1つずつ直します。"
+                 : (askPlace() ? "商を立てる位は、子どもがえらびます。"
+                               : "商は必ず十の位から立つので、書く位置はアプリが決めます。")));
       }
-      bind("segDiv", function(id){ divMode = id; });
-      bind("segRem", function(id){ remMode = id; });
+
+      bind("segSrc", function(id){ srcMode = id; });
       refresh();
     }, setBtn);
   });
