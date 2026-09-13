@@ -770,17 +770,18 @@ body{
         for(var m = 0; m < dw; m++){
           var ki = dw-1-m;
           var cin = (ki === dw-1) ? 0 : cs[ki];
-          kinfo[rev[m]] = {kind:"digit", d:Vd[ki], q:st.q, carryIn:cin, t:Vd[ki]*st.q + cin};
-          kcells.push(rev[m]);
+          var tt2 = Vd[ki]*st.q + cin;
+          // 56×4 なら 6×4=24 なので、先に くり上がりの 2 を書いてから 4 を書く
           if(ki > 0 && cs[ki-1] > 0 && carryMode === "on"){
             var cid = "k" + i + "_" + (ki-1);
             exp[cid] = cs[ki-1];
             // くり上がりは、それを足しこむ「積のけた」の右肩に置く
-            // 54×9 なら 4×9=36 の 3 を、積 486 の十の位（8）の右肩に
             carryCells.push({id:cid, stage:i, host:"c" + prodRow + "_" + (st.col - dw + ki)});
-            kinfo[cid] = {kind:"carry", d:Vd[ki], q:st.q, t:Vd[ki]*st.q + cin, val:cs[ki-1]};
+            kinfo[cid] = {kind:"carry", d:Vd[ki], q:st.q, t:tt2, val:cs[ki-1]};
             kcells.push(cid);
           }
+          kinfo[rev[m]] = {kind:"digit", d:Vd[ki], q:st.q, carryIn:cin, t:tt2};
+          kcells.push(rev[m]);
         }
         if(lead > 0) kcells.push(rev[dw]);
       }
@@ -790,7 +791,10 @@ body{
         hintFor: (dw < 2) ? null : function(cellId){
           var f = kinfo[cellId];
           if(!f) return st.q + " × " + v + " は？";
-          if(f.kind === "carry") return f.t + " の十の位 " + f.val + " を、右肩に小さく書こう";
+          if(f.kind === "carry"){
+            return f.d + " × " + f.q + " = " + f.t + "。くり上がりの " + f.val
+                 + " を 先に右肩へ小さく書こう";
+          }
           return f.carryIn
             ? (f.d + " × " + f.q + " に くり上がりの " + f.carryIn + " をたして " + f.t + "。その一の位を書くよ")
             : (f.d + " × " + f.q + " は？ その一の位を書くよ");
