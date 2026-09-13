@@ -631,6 +631,22 @@ body{
   /* ---------- もんだいを組み立てる（けた数によらない） ---------- */
   function ketaName(col, nw){ return KETA[nw - 1 - col] || ""; }
 
+  // くり下がりの ことば（answer=true なら 計算の形まで見せる）
+  function subWords(info, answer){
+    if(info.aEff < 0){
+      return "この位は 0 だから くり下げられないね。もう1つ上の位からくり下げて、9 − " + info.b
+           + (answer ? " だよ" : "");
+    }
+    var pre = info.borrowedIn
+      ? ("下の位に 1 くり下げたから、" + info.a + " ではなく " + info.aEff + " からひくよ。")
+      : "";
+    if(info.needBorrow){
+      return pre + info.aEff + " から " + info.b + " はひけないね。上の位から 1 くり下げて"
+           + (answer ? ("、" + (info.aEff + 10) + " − " + info.b) : "");
+    }
+    return pre + (answer ? (info.aEff + " − " + info.b + " は？") : "もう一度 数えてみよう");
+  }
+
   function buildProblem(n, v, wantPlace){
     var D  = String(n).split("").map(Number);
     var nw = D.length, dw = String(v).length;
@@ -671,7 +687,7 @@ body{
       return ids;
     }
 
-    var steps = [];
+    var steps = [], prevDiffStart = 0;
     stages.forEach(function(st, i){
       var prodRow = 2 + 2*i, diffRow = 3 + 2*i;
       var qid = "c0_" + st.col;
@@ -679,6 +695,23 @@ body{
       var prodIds = put(prodRow, st.col, st.prod);
       var diffIds = put(diffRow, st.col, st.diff);
       var round   = Math.round(v/10)*10;
+
+      // ひき算を 一の位から 1けたずつ たどって、くり下がりを記録する
+      var aStart = (i === 0) ? 0 : prevDiffStart;
+      var width  = st.col - aStart + 1;
+      var aStr = String(st.into), bStr = String(st.prod);
+      while(aStr.length < width) aStr = "0" + aStr;
+      while(bStr.length < width) bStr = "0" + bStr;
+      var sub = {}, borrow = 0;
+      for(var j = width-1; j >= 0; j--){
+        var a = Number(aStr.charAt(j)), b = Number(bStr.charAt(j));
+        var aEff = a - borrow;                 // 下の位にくり下げたあとの この位の数
+        var need = (aEff < b) ? 1 : 0;         // 上の位から くり下げるか
+        sub[aStart + j] = {a:a, b:b, aEff:aEff, borrowedIn:borrow, needBorrow:need,
+                           c:(need ? aEff + 10 : aEff) - b};
+        borrow = need;
+      }
+      prevDiffStart = st.col - String(st.diff).length + 1;
 
       steps.push({k:"たてる", stage:i, cells:[qid], into:st.into, col:st.col,
         guide:"" + ketaName(st.col, nw) + "に商をたてよう",
@@ -692,12 +725,17 @@ body{
       steps.push({k:"かける", stage:i, cells:prodIds,
         guide:"たてた商と、わる数をかけよう", hint:st.q + " × " + v + " は？"});
 
-      steps.push({k:"ひく", stage:i, cells:diffIds, last:(i === qw-1), into:st.into, prod:st.prod,
-        guide: (i === qw-1 && st.diff > 0)
-                 ? "上の数から、かけた数をひこう。のこりがあまり"
-                 : "上の数から、かけた数をひこう",
+      steps.push({k:"ひく", stage:i, cells:diffIds.slice().reverse(), last:(i === qw-1),
+        into:st.into, prod:st.prod, sub:sub,
+        guide: (diffIds.length > 1 ? "一の位からじゅんに、上の数からひこう" : "上の数から、かけた数をひこう")
+               + ((i === qw-1 && st.diff > 0) ? "。のこりがあまり" : ""),
         hint: st.into + " − " + st.prod + " は？"
-              + (i === qw-1 ? (st.diff === 0 ? "（0 になるよ）" : "（のこりが あまり）") : "")});
+              + (i === qw-1 ? (st.diff === 0 ? "（0 になるよ）" : "（のこりが あまり）") : ""),
+        hintFor: function(cellId){
+          var info = sub[Number(cellId.split("_")[1])];
+          if(!info) return st.into + " − " + st.prod + " は？";
+          return subWords(info, true);
+        }});
 
       if(st.bring !== null){
         exp["c"+diffRow+"_"+(st.col+1)] = st.bring;      // おろす数
@@ -930,9 +968,19 @@ body{
           + step.into + " より大きいね。1つ小さくしてみよう"
         : "小さすぎるよ。ひいたあとが まだ " + P.v + " でわれてしまうね。1つ大きくしてみよう";
     }
-    if(step.k === "ひく" && P.v <= 9 && dig >= P.v){
-      return (step.last ? "あまりは " : "ひいたあとは ")
-           + "わる数の " + P.v + " より小さくなるはずだよ";
+    if(step.k === "ひく"){
+      var info = step.sub && step.sub[Number(target.split("_")[1])];
+      if(info){
+        // くり下げたことを忘れている、いちばん多いまちがい
+        if(info.borrowedIn && info.a >= info.b && dig === info.a - info.b){
+          return "下の位に 1 くり下げたね。" + info.a + " ではなく " + info.aEff + " からひくよ";
+        }
+        if(info.needBorrow || info.aEff < 0) return subWords(info, false);
+      }
+      if(P.v <= 9 && dig >= P.v){
+        return (step.last ? "あまりは " : "ひいたあとは ")
+             + "わる数の " + P.v + " より小さくなるはずだよ";
+      }
     }
     return "おしい！ もう一度 " + step.k + "を やってみよう";
   }
@@ -982,7 +1030,12 @@ body{
     setTimeout(function(){ el.classList.remove("wrong"); render(true); }, 700);
   }
 
-  function showHint(){ if(!P.done) say("hint", "ヒント：" + P.steps[P.si].hint); }
+  function showHint(){
+    if(P.done) return;
+    var step = P.steps[P.si];
+    var h = step.hintFor ? step.hintFor(step.cells[P.ci]) : step.hint;
+    say("hint", "ヒント：" + h);
+  }
 
   function retry(){
     P.filled = {}; P.si = 0; P.ci = 0; P.sel = null;
