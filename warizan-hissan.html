@@ -894,20 +894,24 @@ body{
       for(var j3 = st.col; j3 >= aStart; j3--){
         var inf = sub[j3];
         var effFull = inf.aEff + (inf.needBorrow ? 10 : 0);
-        if(carryMode === "on" && dw >= 2 && inf.needBorrow){
-          // まず 上の位を 1 へらす（0 で かせないときは そのまた上まで さかのぼる）
-          var k3 = j3 - 1;
+        // effFull が 10 未満のときは、この位のくりさげは すでに連鎖の中で書き終えている
+        if(carryMode === "on" && dw >= 2 && inf.needBorrow && effFull >= 10){
+          // かせる位まで さかのぼる（0 の位は かせないので さらに上へ）
+          var chain = [], k3 = j3 - 1;
           while(k3 >= aStart){
-            var ik = sub[k3];
+            chain.push(k3);
+            if(sub[k3].a === 0) k3--; else break;
+          }
+          // 外側（上の位）から 順に書く
+          for(var ci = chain.length - 1; ci >= 0; ci--){
+            var kk = chain[ci], ik = sub[kk];
             var ek = ik.aEff + (ik.needBorrow ? 10 : 0);
-            if(!doneR[k3]){
-              doneR[k3] = 1;
-              var rid = "b" + i + "_r" + k3;
-              exp[rid] = ek % 10;
-              borrowCells.push({id:rid, side:"r", host:topId(k3), strike:true, stepIdx:hikuIdx});
-              hadd(rid, ek % 10, {kind:"down", a:ik.a, eff:ek, forCol:j3});
-            }
-            if(ik.needBorrow) k3--; else break;
+            if(doneR[kk]) continue;
+            doneR[kk] = 1;
+            var rid = "b" + i + "_r" + kk;
+            exp[rid] = ek % 10;
+            borrowCells.push({id:rid, side:"r", host:topId(kk), strike:true, stepIdx:hikuIdx});
+            hadd(rid, ek % 10, {kind:"down", a:ik.a, eff:ek, zero:(ik.a === 0)});
           }
           // つぎに この位の左肩に 1 をつけて 1X と見立てる
           var lid = "b" + i + "_l" + j3;
@@ -931,8 +935,12 @@ body{
           if(!f) return st.into + " − " + st.prod + " は？";
           if(f.kind === "lend10") return "上の位を へらしたので、" + f.a + " の左肩に 1 をつけて "
                                        + f.eff + " と見るよ";
-          if(f.kind === "down")   return "先に この位を 1 へらすよ。" + f.a + " は " + (f.eff % 10)
-                                       + "。右肩に " + (f.eff % 10) + " を書いて、もとの " + f.a + " は消そう";
+          if(f.kind === "down"){
+            return f.zero
+              ? ("この位は 0 で かせないね。もうひとつ上から 1 くりさげて 9。右肩に 9 を書いて、もとの 0 は消そう")
+              : ("先に この位を 1 へらすよ。" + f.a + " は " + (f.eff % 10)
+                 + "。右肩に " + (f.eff % 10) + " を書いて、もとの " + f.a + " は消そう");
+          }
           return subWords(f.info, true);
         }});
 
@@ -1243,7 +1251,9 @@ body{
     if(step.k === "ひく" && step.hinfo){
       var hf = step.hinfo[P.ci];
       if(hf && hf.kind === "lend10") return "くりさげたしるしだよ。左肩には 1 を書くよ";
-      if(hf && hf.kind === "down")   return "この位を 1 へらすので、" + hf.a + " より 1 小さい数だよ";
+      if(hf && hf.kind === "down")   return hf.zero
+        ? "0 は かせないので、上から 1 くりさげて 9 になるよ"
+        : ("この位を 1 へらすので、" + hf.a + " より 1 小さい数だよ");
     }
     if(step.k === "ひく"){
       var info = step.sub && step.sub[Number(target.split("_")[1])];
