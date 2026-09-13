@@ -212,7 +212,7 @@ body{
 @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
 @keyframes pop{0%{transform:scale(.6);opacity:.3}60%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
 
-/* くり上がりを書く小さいマス（くり上がりを足しこむけたの右肩） */
+/* 肩に書く小さいマス（左肩・右肩） */
 .carrybox{
   position:absolute;
   top:calc(var(--cw) * 0.02);
@@ -230,6 +230,8 @@ body{
   z-index:3;
   transition:border-color .18s, background .18s;
 }
+/* 左肩 */
+.carrybox.left{ right:auto; left:calc(var(--cw) * 0.02); }
 .carrybox.pending{border-color:var(--line)}
 .carrybox.active{
   border:2px solid var(--blue);
@@ -754,82 +756,74 @@ body{
                     : (v + " を およそ " + round + " とみて、" + st.into + " ÷ " + round
                        + " で見当をつけよう。合わなければ 1つずつ直すよ"))});
 
-      // かけ算：わる数が2けた以上なら 一の位から。くり上がりも書く
+      // かけ算：わる数が2けたのときは 肩を使って けたごとに たす
       var kcells = prodIds, kwant = null, kinfo = null;
-      if(dw >= 2 && st.q > 0){
-        var Vd = String(v).split("").map(Number);
-        var cs = [], cr = 0;
-        for(var k2 = dw-1; k2 >= 0; k2--){
-          var tt0 = Vd[k2]*st.q + cr;
-          cr = Math.floor(tt0/10);
-          if(k2 > 0) cs[k2-1] = cr;
-        }
-        var rev = prodIds.slice().reverse();     // 一の位から
+      if(dw === 2 && st.q > 0 && carryMode === "on"){
+        var V0 = Math.floor(v/10), V1 = v%10;
+        var R1 = V1*st.q, T1 = Math.floor(R1/10), U1 = R1%10;   // 一の位 × 商
+        var R0 = V0*st.q, T0 = Math.floor(R0/10), U0 = R0%10;   // 十の位 × 商
+        var s1 = T1 + U0;                                       // 十の位でたす
+        var c1d = s1 % 10, c1c = Math.floor(s1/10);
+        var c2  = T0 + c1c;                                     // 百の位
+
+        var rev = prodIds.slice().reverse();     // rev[0]=一の位 rev[1]=十の位 rev[2]=百の位
+        var colT = st.col - 1, colH = st.col - 2;
         kcells = []; kwant = []; kinfo = [];
         var add = function(cell, want, info){ kcells.push(cell); kwant.push(want); kinfo.push(info); };
+        var sh = function(side, col){
+          var id = "k" + i + "_" + side + col;
+          carryCells.push({id:id, stage:i, side:side, host:"c" + prodRow + "_" + col});
+          return id;
+        };
 
-        for(var m = 0; m < dw; m++){
-          var ki   = dw-1-m;
-          var cin  = (ki === dw-1) ? 0 : cs[ki];
-          var base = Vd[ki]*st.q;                // くり上がりを足す前
-          var tot  = base + cin;
+        // 一の位 × 商 …… 出た数を左から（十の位の右肩 → 一の位）
+        if(T1 > 0){
+          var idTR = sh("r", colT); exp[idTR] = T1;
+          add(idTR, T1, {kind:"sh", d:V1, q:st.q, r:R1, part:T1, where:"十の位の右肩"});
+        }
+        add(rev[0], U1, {kind:"one", d:V1, q:st.q, r:R1});
 
-          if(ki > 0){
-            // 途中のけた：くり上がりを先に書いてから、積のそのけた
-            if(cs[ki-1] > 0 && carryMode === "on"){
-              var cid = "k" + i + "_" + (ki-1);
-              exp[cid] = cs[ki-1];
-              carryCells.push({id:cid, stage:i, host:"c" + prodRow + "_" + (st.col - dw + ki)});
-              add(cid, cs[ki-1], {kind:"carry", d:Vd[ki], q:st.q, t:tot, val:cs[ki-1]});
-            }
-            add(rev[m], tot % 10, {kind:"digit", d:Vd[ki], q:st.q, carryIn:cin, t:tot});
-          }else if(carryMode === "on" && cin > 0){
-            // いちばん左：まず かけ算の答えをそのまま左から書き、あとでくり上がりを足して直す
-            var bs = String(base);
-            for(var b2 = 0; b2 < bs.length; b2++){
-              add(rev[dw-1 + (bs.length-1-b2)], Number(bs.charAt(b2)),
-                  {kind:"base", d:Vd[0], q:st.q, base:base});
-            }
-            add(rev[dw-1], tot % 10,
-                {kind:"fix", was:base % 10, addv:cin, base:base, tot:tot, top:false});
-            if((base % 10) + cin >= 10){
-              add(rev[dw], Math.floor(tot/10),
-                  {kind:"fix", was:Math.floor(base/10), addv:1, base:base, tot:tot, top:true});
-            }
-          }else{
-            // くり上がりを書かない設定、またはくり上がりなし：出た数をそのまま左から
-            var ts = String(tot);
-            for(var b3 = 0; b3 < ts.length; b3++){
-              add(rev[dw-1 + (ts.length-1-b3)], Number(ts.charAt(b3)),
-                  {kind:"digit", d:Vd[0], q:st.q, carryIn:cin, t:tot, top:(b3 === 0 && ts.length > 1)});
-            }
+        // 十の位 × 商 …… 出た数を左から（百の位の右肩 → 十の位の左肩）
+        if(R0 >= 10){
+          var idHR = sh("r", colH); exp[idHR] = T0;
+          add(idHR, T0, {kind:"sh", d:V0, q:st.q, r:R0, part:T0, where:"百の位の右肩"});
+        }
+        if(T1 > 0){
+          var idTL = sh("l", colT); exp[idTL] = U0;
+          add(idTL, U0, {kind:"sh", d:V0, q:st.q, r:R0, part:U0, where:"十の位の左肩"});
+          // 十の位：左肩 + 右肩
+          if(c1c > 0){
+            var idHL = sh("l", colH); exp[idHL] = c1c;
+            add(idHL, c1c, {kind:"up", a:U0, b:T1, sum:s1});
           }
+          add(rev[1], c1d, {kind:"sum", a:U0, b:T1, sum:s1});
+        }else{
+          // たすものが無いので そのまま十の位へ
+          add(rev[1], U0, {kind:"one", d:V0, q:st.q, r:R0});
+        }
+
+        // 百の位：左肩 + 右肩
+        if(c2 > 0){
+          add(rev[2], c2, (c1c > 0 && R0 >= 10)
+                ? {kind:"sum", a:c1c, b:T0, sum:c2}
+                : {kind:"one2", val:c2});
         }
       }
       steps.push({k:"かける", stage:i, cells:kcells, want:kwant, kinfo:kinfo,
         guide:"たてた商と、わる数をかけよう" + (dw >= 2 ? "。一の位から" : ""),
         hint: st.q + " × " + v + " は？",
-        hintFor: (dw < 2 || !kinfo) ? null : function(cellId, idx){
+        hintFor: (!kinfo) ? null : function(cellId, idx){
           var f = kinfo[idx];
           if(!f) return st.q + " × " + v + " は？";
-          if(f.kind === "carry"){
-            return f.d + " × " + f.q + " = " + f.t + "。くり上がりの " + f.val
-                 + " を 先に右肩へ小さく書こう";
-          }
-          if(f.kind === "base"){
-            return f.d + " × " + f.q + " = " + f.base + "。まず " + f.base + " をそのまま左から書くよ";
-          }
-          if(f.kind === "fix"){
-            return f.top
-              ? ("くり上がった 1 を、さきに書いた " + f.was + " にたして " + (f.was+1) + " に直そう")
-              : ("書いた " + f.was + " に くり上がりの " + f.addv + " をたして " + (f.was + f.addv)
-                 + "。このけたは " + (f.tot % 10) + " に直そう");
-          }
-          if(f.top) return f.d + " × " + f.q + (f.carryIn ? (" + " + f.carryIn) : "") + " = " + f.t
-                         + "。左から書くので、まず " + Math.floor(f.t/10) + " だよ";
-          return f.carryIn
-            ? (f.d + " × " + f.q + " に くり上がりの " + f.carryIn + " をたして " + f.t + "。その一の位を書くよ")
-            : (f.d + " × " + f.q + " は？ その一の位を書くよ");
+          if(f.kind === "sh")   return f.d + " × " + f.q + " = " + f.r + "。" + f.r
+                                     + " の " + f.part + " を " + f.where + "に書こう";
+          if(f.kind === "one")  return f.d + " × " + f.q + " = " + f.r + "。その一の位を書くよ";
+          if(f.kind === "up")   return "左肩の " + f.a + " と 右肩の " + f.b + " で " + f.sum
+                                     + "。くり上がった 1 を ひとつ上の位の左肩に書こう";
+          if(f.kind === "sum")  return "左肩の " + f.a + " と 右肩の " + f.b + " で " + f.sum
+                                     + "。その一の位を書くよ";
+          if(f.kind === "one2") return "この位に入るのは " + f.val + " だよ";
+          return st.q + " × " + v + " は？";
         }});
 
       steps.push({k:"ひく", stage:i, cells:diffIds.slice().reverse(), last:(i === qw-1),
@@ -957,7 +951,7 @@ body{
       var hostEl = cellEl[cc.host];
       if(!hostEl) return;
       var box = document.createElement("div");
-      box.className = "carrybox";
+      box.className = "carrybox" + (cc.side === "l" ? " left" : "");
       var sp2 = document.createElement("span");
       sp2.className = "val"; sp2.textContent = "";
       box.appendChild(sp2);
@@ -1091,20 +1085,14 @@ body{
     if(step.k === "かける" && step.kinfo){
       var kf = step.kinfo[P.ci];
       if(kf){
-        if(kf.kind === "carry") return "くり上がりは " + kf.t + " の十の位だよ";
-        if(kf.kind === "base"){
-          return "ここは まず " + kf.d + " × " + kf.q + " = " + kf.base
-               + " を そのまま書くよ。くり上がりは あとでたす";
-        }
-        if(kf.kind === "fix"){
-          return kf.top
-            ? ("くり上がった 1 を さきに書いた " + kf.was + " にたすと？")
-            : ("書いた " + kf.was + " に くり上がりの " + kf.addv + " をたすと "
-               + (kf.was + kf.addv) + "。このけたに入るのは その一の位だよ");
-        }
-        if(kf.carryIn && dig === (kf.d * kf.q) % 10){
-          return "くり上がりの " + kf.carryIn + " を たし忘れていないかな？";
-        }
+        if(kf.kind === "sh")   return kf.d + " × " + kf.q + " = " + kf.r + "。ここに入るのは その "
+                                    + (kf.where.indexOf("右肩") >= 0 && kf.part === Math.floor(kf.r/10)
+                                        ? "十の位" : "一の位") + "だよ";
+        if(kf.kind === "one")  return kf.d + " × " + kf.q + " = " + kf.r + " の一の位だよ";
+        if(kf.kind === "up")   return "左肩の " + kf.a + " と 右肩の " + kf.b + " をたすと "
+                                    + kf.sum + "。くり上がるのは 1 だね";
+        if(kf.kind === "sum")  return "左肩の " + kf.a + " と 右肩の " + kf.b + " をたすと "
+                                    + kf.sum + "。このマスは その一の位だよ";
       }
     }
     if(step.k === "ひく"){
