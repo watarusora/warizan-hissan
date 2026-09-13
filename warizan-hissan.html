@@ -847,9 +847,14 @@ body{
     });
 
     // 商をどの位に立てるか（候補が2つあるときだけ選ばせる）
+    // 本当に商が立ちうる位（ここが2つ以上あるときだけ、位をえらばせる）
+    var realCells = [];
+    [dw-1, dw].forEach(function(c){ if(c >= 0 && c < nw) realCells.push("c0_"+c); });
+    // えらべる枠は すべてのけた。百の位に立ててしまう まちがいを その場で拾うため、
+    // ダミーの枠も 本物とまったく同じ見た目にする
     var placeCells = [];
-    [dw-1, dw].forEach(function(c){ if(c >= 0 && c < nw) placeCells.push("c0_"+c); });
-    if(wantPlace && placeCells.length > 1){
+    for(var pc = 0; pc < nw; pc++) placeCells.push("c0_"+pc);
+    if(wantPlace && realCells.length > 1){
       steps[0].place = true;
       steps[0].guide = "商を立てる位をえらんでタップしよう";
     }
@@ -1063,16 +1068,24 @@ body{
   /* ---------- まちがいの ことば ---------- */
   function wrongText(step, target, dig, placeErr){
     if(placeErr){
-      var head = Number(String(P.n).slice(0, P.dw));
+      var pickCol  = Number(target.split("_")[1]);
       var rightCol = Number(step.cells[0].split("_")[1]);
+      var take     = pickCol + 1;                              // その位に立てるなら 先頭何けたを見ることになるか
+      var headN    = Number(String(P.n).slice(0, take));
       if(P.dw === 1){
-        return (rightCol > 0)
-          ? "十の位の " + head + " は " + P.v + " より小さいね。十の位に商は立たないよ"
-          : "十の位の " + head + " は " + P.v + " でわれるよ。商は十の位から立つね";
+        return (pickCol < rightCol)
+          ? "十の位の " + headN + " は " + P.v + " より小さいね。十の位に商は立たないよ"
+          : "十の位の " + Number(String(P.n).slice(0,1)) + " は " + P.v + " でわれるよ。商は十の位から立つね";
       }
-      return (rightCol > P.dw - 1)
-        ? "はじめの " + P.dw + "けた " + head + " は " + P.v + " より小さいね。そこには商が立たないよ"
-        : "はじめの " + P.dw + "けた " + head + " は " + P.v + " でわれるよ。商はそこから立つね";
+      // わる数のけた数より少ないけたを見ている（百の位に立ててしまう まちがい）
+      if(take < P.dw){
+        return "わる数は " + P.dw + "けただよ。はじめの " + take + "けた " + headN
+             + " だけでは " + P.v + " でわれないね";
+      }
+      return (pickCol < rightCol)
+        ? "はじめの " + take + "けた " + headN + " は " + P.v + " より小さいね。そこには商が立たないよ"
+        : "はじめの " + P.dw + "けた " + Number(String(P.n).slice(0,P.dw)) + " は " + P.v
+          + " でわれるよ。商はそこから立つね";
     }
     if(step.k === "たてる"){
       var want = P.exp[target];
